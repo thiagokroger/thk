@@ -1,0 +1,17 @@
+{
+  "name": "thiago-tools",
+  "owner": {
+    "name": "Thiago Kroger"
+  },
+  "plugins": [
+    {
+      "name": "thk",
+      "description": "The Hand of the King — ticket-to-Draft-PR orchestrator (Claude Code plugin). Captures context, drafts a plan, summons the Small Council when the ticket warrants review, executes the plan, opens a Draft PR. Pluggable ticket source MCP (Linear today) and council runners (Claude / Codex / Gemini).",
+      "version": "0.2.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/thiagokroger/thk.git"
+      }
+    }
+  ]
+}

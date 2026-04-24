@@ -1,0 +1,10 @@
+.DS_Store
+*.log
+node_modules/
+
+# Secrets — never commit these
+.jamtoken
+.thk/keys/
+*.key
+.env
+.env.*

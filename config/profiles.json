@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "default_profile": "claude_codex",
+  "roles": [
+    "hand",
+    "master_of_whisperers",
+    "grand_maester",
+    "master_of_laws",
+    "lord_commander",
+    "master_of_coin",
+    "master_of_ships",
+    "counselor"
+  ],
+  "profiles": {
+    "claude_codex": {
+      "description": "Current production shape: Claude Code hosts the council, Counselor Altman wraps the Codex CLI.",
+      "parallel": true,
+      "roles": {
+        "hand": {
+          "runner": "claude-code",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_whisperers": {
+          "runner": "claude-code",
+          "agent": "master-of-whisperers",
+          "model": "claude-sonnet-4-6"
+        },
+        "grand_maester": {
+          "runner": "claude-code",
+          "agent": "grand-maester",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_laws": {
+          "runner": "claude-code",
+          "agent": "master-of-laws",
+          "model": "claude-opus-4-7"
+        },
+        "lord_commander": {
+          "runner": "claude-code",
+          "agent": "lord-commander",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_coin": {
+          "runner": "claude-code",
+          "agent": "master-of-coin",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_ships": {
+          "runner": "claude-code",
+          "agent": "master-of-ships",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        "counselor": {
+          "runner": "claude-code",
+          "agent": "counselor-altman",
+          "model": "claude-sonnet-4-6",
+          "artifact": "counselor-altman.md",
+          "adapter": {
+            "runner": "codex-cli",
+            "skill": "codex-review",
+            "model": "gpt-5",
+            "reasoning_effort": "xhigh"
+          }
+        }
+      }
+    },
+    "claude_only": {
+      "description": "Claude Code hosts every role, including the oversight counselor.",
+      "parallel": true,
+      "roles": {
+        "hand": {
+          "runner": "claude-code",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_whisperers": {
+          "runner": "claude-code",
+          "agent": "master-of-whisperers",
+          "model": "claude-sonnet-4-6"
+        },
+        "grand_maester": {
+          "runner": "claude-code",
+          "agent": "grand-maester",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_laws": {
+          "runner": "claude-code",
+          "agent": "master-of-laws",
+          "model": "claude-opus-4-7"
+        },
+        "lord_commander": {
+          "runner": "claude-code",
+          "agent": "lord-commander",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_coin": {
+          "runner": "claude-code",
+          "agent": "master-of-coin",
+          "model": "claude-opus-4-7"
+        },
+        "master_of_ships": {
+          "runner": "claude-code",
+          "agent": "master-of-ships",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        "counselor": {
+          "runner": "claude-code",
+          "agent": "counselor",
+          "model": "claude-opus-4-7",
+          "artifact": "counselor.md"
+        }
+      }
+    },
+    "codex_with_opus_counselor": {
+      "description": "Codex CLI handles the council review roles; the counselor is Claude Opus when a Claude-capable host is available.",
+      "parallel": false,
+      "roles": {
+        "hand": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "master_of_whisperers": {
+          "runner": "claude-code",
+          "agent": "master-of-whisperers",
+          "model": "claude-sonnet-4-6",
+          "notes": "URL and MCP capture still requires the Claude plugin host until a standalone capture adapter exists."
+        },
+        "grand_maester": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "master_of_laws": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "lord_commander": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "master_of_coin": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "high"
+        },
+        "master_of_ships": {
+          "runner": "claude-code",
+          "agent": "master-of-ships",
+          "model": "claude-haiku-4-5-20251001",
+          "notes": "GitHub and Linear plumbing still uses Claude MCP/tooling in the plugin host."
+        },
+        "counselor": {
+          "runner": "claude-code",
+          "agent": "counselor",
+          "model": "claude-opus-4-6",
+          "artifact": "counselor.md"
+        }
+      }
+    },
+    "codex_only": {
+      "description": "Codex CLI handles model work. Claude-only capture/plumbing roles must be supplied by another host adapter.",
+      "parallel": false,
+      "roles": {
+        "hand": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "master_of_whisperers": {
+          "runner": "manual",
+          "notes": "Provide captured Linear/Jam/Figma context on disk, or add a capture adapter."
+        },
+        "grand_maester": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "master_of_laws": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "lord_commander": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh"
+        },
+        "master_of_coin": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "high"
+        },
+        "master_of_ships": {
+          "runner": "manual",
+          "notes": "Use gh/git directly or add a shipping adapter."
+        },
+        "counselor": {
+          "runner": "codex-cli",
+          "model": "gpt-5",
+          "reasoning_effort": "xhigh",
+          "artifact": "counselor.md"
+        }
+      }
+    },
+    "gemini_only": {
+      "description": "Gemini CLI handles model work via a command-template adapter. Capture/plumbing still needs a host adapter.",
+      "parallel": false,
+      "roles": {
+        "hand": {
+          "runner": "gemini-cli",
+          "model": "gemini-pro",
+          "args": [
+            "-p",
+            "{{prompt}}"
+          ]
+        },
+        "master_of_whisperers": {
+          "runner": "manual",
+          "notes": "Provide captured Linear/Jam/Figma context on disk, or add a capture adapter."
+        },
+        "grand_maester": {
+          "runner": "gemini-cli",
+          "model": "gemini-pro",
+          "args": [
+            "-p",
+            "{{prompt}}"
+          ]
+        },
+        "master_of_laws": {
+          "runner": "gemini-cli",
+          "model": "gemini-pro",
+          "args": [
+            "-p",
+            "{{prompt}}"
+          ]
+        },
+        "lord_commander": {
+          "runner": "gemini-cli",
+          "model": "gemini-pro",
+          "args": [
+            "-p",
+            "{{prompt}}"
+          ]
+        },
+        "master_of_coin": {
+          "runner": "gemini-cli",
+          "model": "gemini-pro",
+          "args": [
+            "-p",
+            "{{prompt}}"
+          ]
+        },
+        "master_of_ships": {
+          "runner": "manual",
+          "notes": "Use gh/git directly or add a shipping adapter."
+        },
+        "counselor": {
+          "runner": "gemini-cli",
+          "model": "gemini-pro",
+          "artifact": "counselor.md",
+          "args": [
+            "-p",
+            "{{prompt}}"
+          ]
+        }
+      }
+    },
+    "portable_sequential": {
+      "description": "Lowest-common-denominator handoff profile: no model runner is assumed; prompts are written for a human or external tool.",
+      "parallel": false,
+      "roles": {
+        "hand": {
+          "runner": "manual"
+        },
+        "master_of_whisperers": {
+          "runner": "manual"
+        },
+        "grand_maester": {
+          "runner": "manual"
+        },
+        "master_of_laws": {
+          "runner": "manual"
+        },
+        "lord_commander": {
+          "runner": "manual"
+        },
+        "master_of_coin": {
+          "runner": "manual"
+        },
+        "master_of_ships": {
+          "runner": "manual"
+        },
+        "counselor": {
+          "runner": "manual",
+          "artifact": "counselor.md"
+        }
+      }
+    }
+  }
+}
