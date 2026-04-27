@@ -1,6 +1,6 @@
 ---
 name: _scaffold-session
-description: Create the session folder layout at an absolute path — `<sessionPath>/{worktree,assets-worktree,context}` plus a skeleton `progress.md`. Creates two git worktrees of the target repo: the code worktree on the session branch (forked from base) and the assets worktree on an orphan history backed by `refs/thk/<ticket>`. Runs `pnpm i` inside the code worktree. Idempotent — resuming an existing session returns the same paths without overwriting.
+description: Create the session folder layout at an absolute path — `<sessionPath>/{worktree,assets-worktree,context}` plus a skeleton `progress.md`. Creates two git worktrees of the target repo: the code worktree on the session branch (forked from base) and the assets worktree on an orphan history backed by `refs/thk/<ticket>`. Installs dependencies in the code worktree using the package manager inferred from the lockfile (`pnpm` / `yarn` / `npm` / `bun`), or skips when the project has no `package.json` and no `verification.install` override. Idempotent — resuming an existing session returns the same paths without overwriting.
 ---
 
 # Scaffold Session
@@ -18,32 +18,41 @@ description: Create the session folder layout at an absolute path — `<sessionP
 }
 ```
 
-All four paths are absolute. The session lives under `<targetRepo>/.thk/sessions/<sessionId>` — **inside** the target repo. The `.thk/` directory must be excluded by git so session folders don't show up in `git status`. Two paths get there: `install.sh` adds it to `.gitignore` with explicit consent during setup, OR — for users who installed via the Claude Code marketplace and never ran the script — this skill auto-adds it on first run. Either way, by the time the first session folder is created, `.thk/` is excluded.
+All four paths are absolute. The session lives under `<targetRepo>/.thk/sessions/<sessionId>` — **inside** the target repo. Most of `.thk/` must be excluded by git so session folders, secrets, and per-developer config don't show up in `git status`. **One file is the exception: `<targetRepo>/.thk/policies.json` — that's team-shared (banned tables, verification commands) and SHOULD be committed.**
+
+`install.sh` writes the right lines on guided setup. For users who installed via the Claude Code marketplace and never ran the script, this skill is the backstop — it auto-adds the exclude block on first run.
 
 ## Procedure
 
 ```bash
-# Ensure .thk/ is gitignored — the marketplace install path skips install.sh
-# entirely, so this skill is the second line of defense. Logic:
-#   1. If .thk/ already in <targetRepo>/.gitignore → no-op.
-#   2. Else if .thk/ already in <targetRepo>/.git/info/exclude → no-op.
-#      (User opted into the repo-local list explicitly; respect that signal
-#      and don't duplicate the entry into the committed .gitignore.)
-#   3. Else → append .thk/ to <targetRepo>/.gitignore and log a one-line
-#      notice to stderr. The committed entry is shared across the team, so
-#      anyone else cloning gets the exclude automatically.
-if grep -qxF '.thk/' <targetRepo>/.gitignore 2>/dev/null; then
-  : # already excluded via .gitignore
-elif grep -qxF '.thk/' <targetRepo>/.git/info/exclude 2>/dev/null; then
-  : # excluded via the repo-local list — user signaled that path
+# Ensure .thk/ is gitignored EXCEPT policies.json (team-shared rules).
+# The marketplace install path skips install.sh entirely, so this skill is
+# the second line of defense.
+#
+# Strategy: a 2-line block that excludes everything under .thk/ but
+# preserves .thk/policies.json. The block is idempotent — we check for
+# the marker comment before appending.
+GITIGNORE_MARKER='# thk session state — .thk/ is per-developer except policies.json (team-shared)'
+if grep -qxF "$GITIGNORE_MARKER" <targetRepo>/.gitignore 2>/dev/null; then
+  : # already added by us (or install.sh) — no-op
+elif grep -qxF '.thk/' <targetRepo>/.git/info/exclude 2>/dev/null \
+     && ! grep -qxF '.thk/' <targetRepo>/.gitignore 2>/dev/null; then
+  : # User opted into the repo-local exclude list explicitly. Respect that
+    # signal — but note: policies.json won't be committable that way unless
+    # the user adds an exception themselves. Log a one-line tip to stderr.
+  echo "scaffold-session: '.thk/' is in .git/info/exclude (per-developer ignore). To share thk policies with the team, move the exclude to .gitignore — this skill will rewrite it on next run if you remove the .git/info/exclude line." >&2
 else
-  # If .gitignore exists and lacks a trailing newline, add one before the entry
+  # If .gitignore exists and lacks a trailing newline, add one before the block
   if [ -f <targetRepo>/.gitignore ] && [ -s <targetRepo>/.gitignore ] \
      && [ -n "$(tail -c 1 <targetRepo>/.gitignore 2>/dev/null)" ]; then
     printf "\n" >> <targetRepo>/.gitignore
   fi
-  printf ".thk/\n" >> <targetRepo>/.gitignore
-  echo "scaffold-session: added '.thk/' to <targetRepo>/.gitignore (was missing — sessions would have appeared in 'git status')." >&2
+  cat >> <targetRepo>/.gitignore <<'IGNORE'
+# thk session state — .thk/ is per-developer except policies.json (team-shared)
+.thk/
+!.thk/policies.json
+IGNORE
+  echo "scaffold-session: added '.thk/' (with '!.thk/policies.json' exception) to <targetRepo>/.gitignore." >&2
 fi
 
 mkdir -p \
@@ -57,8 +66,22 @@ git fetch origin <baseBranch>
 git worktree add -b <branchName> <sessionPath>/worktree origin/<baseBranch>
 
 cd <sessionPath>/worktree
-pnpm i
+# Install dependencies using the project's package manager — same inference rule
+# as `_run-verification`'s install step (lockfile presence wins; default `npm install`
+# if only `package.json` is present; skip if no `package.json` at all).
+<install-command-from-inference>
 ```
+
+Detection:
+
+- `pnpm-lock.yaml` present → `pnpm install --frozen-lockfile`
+- `yarn.lock` present → `yarn install --frozen-lockfile`
+- `package-lock.json` present → `npm ci`
+- `bun.lockb` present → `bun install --frozen-lockfile`
+- only `package.json`, no lockfile → `npm install`
+- no `package.json` at all → skip the install step (the project doesn't have JS-shaped deps; declare a custom command in `<workdir>/.thk/policies.json` under `verification.install` if a different install step is needed)
+
+If `<targetRepo>/.thk/policies.json` declares `verification.install`, that wins over the inference here too — same source-of-truth as the verification gauntlet.
 
 Note: `git worktree add` accepts an absolute path, so the worktree lives under `<sessionPath>/` (inside `<targetRepo>/.thk/sessions/<sessionId>/worktree/`) while still being a valid checkout of `<targetRepo>`. Commits made there push to `<targetRepo>`'s origin. The `.gitignore` entry on `.thk/` keeps it from showing as untracked in the main checkout's `git status`.
 
@@ -88,11 +111,11 @@ else
 fi
 ```
 
-- **No `pnpm i` here** — the assets worktree has no code and no `package.json`. It's a scratch space for the bundle commit.
+- **No install step here** — the assets worktree has no code and no `package.json`. It's a scratch space for the bundle commit.
 - **The local branch name** (`_thk_assets_<TICKET-CODE>`) is a convenience label for the worktree checkout; it never gets pushed. All pushes go to `refs/thk/<TICKET-CODE>`.
 - **The resumption path hydrates from origin first** so a freshly-cloned repo resuming someone else's session picks up the existing ref history.
 
-**Resumption:** if `<sessionPath>/worktree/` already exists, skip `git worktree add` and `pnpm i` for the code worktree. Mirror the same skip for `<sessionPath>/assets-worktree/`. Ensure the four `plan-reviews/round-{1,2}-{plan,diff}/` directories exist (idempotent `mkdir -p`). Sessions created by older versions of this skill may still have the un-suffixed `round-1/` / `round-2/` / `round-3/` layout — leave them in place; the meeting skill reads whichever it finds.
+**Resumption:** if `<sessionPath>/worktree/` already exists, skip `git worktree add` and the install step for the code worktree. Mirror the same skip for `<sessionPath>/assets-worktree/`. Ensure the four `plan-reviews/round-{1,2}-{plan,diff}/` directories exist (idempotent `mkdir -p`). Sessions created by older versions of this skill may still have the un-suffixed `round-1/` / `round-2/` / `round-3/` layout — leave them in place; the meeting skill reads whichever it finds.
 
 ### Write the context README
 
@@ -212,4 +235,4 @@ Write skeleton `progress.md` at `<sessionPath>/progress.md` **only if the file d
 - All paths passed in must be absolute. Do not resolve relative paths — the Hand is responsible for resolving `targetRepo` and `sessionPath` at step 0.
 - The assets worktree is a **second** worktree of the same `<targetRepo>` repo on an orphan history. It must live at `<sessionPath>/assets-worktree/` so `cleanup-session` can tear it down by path, and so `git worktree list` stays tidy.
 - Requires **git >= 2.42** for `git worktree add --orphan`. If the installed git is older, the Hand should fail early with a clear message rather than working around it — the rest of the flow depends on the orphan worktree.
-- If the caller explicitly asked to skip worktrees (rare — not the default), `cd <targetRepo> && git checkout -b <branchName> origin/<baseBranch> && pnpm i` and set `worktreePath` to `<targetRepo>`. Most callers should NOT do this — it would touch the target repo's working tree, which thk's design avoids.
+- If the caller explicitly asked to skip worktrees (rare — not the default), `cd <targetRepo> && git checkout -b <branchName> origin/<baseBranch> && <inferred-install-command>` and set `worktreePath` to `<targetRepo>`. Most callers should NOT do this — it would touch the target repo's working tree, which thk's design avoids.

@@ -23,7 +23,7 @@
         "master_of_whisperers": {
           "runner": "claude-code",
           "agent": "master-of-whisperers",
-          "model": "claude-sonnet-4-6"
+          "model": "claude-sonnet-4-7"
         },
         "grand_maester": {
           "runner": "claude-code",
@@ -58,7 +58,7 @@
           "adapter": {
             "runner": "codex-cli",
             "skill": "codex-review",
-            "model": "gpt-5",
+            "model": "gpt-5.5",
             "reasoning_effort": "xhigh"
           }
         }

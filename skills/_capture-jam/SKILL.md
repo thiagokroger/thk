@@ -23,6 +23,8 @@ Downloads every available data point from a Jam recording via the Jam MCP. Write
 
   If no token is found on a video jam, skip the download and report `framesAvailable: false` with `reason: "no JAM_TOKEN"`. Capture-jam still produces details / transcript / analysis / logs / network without the token — the token only gates frame extraction.
 
+  **Note on the contract with `thk`:** the Hand runs a token preflight at Step 1c.5 of `thk/SKILL.md` before dispatching this skill, and halts the whole run with a `needs-jam-token` outcome if a video jam exists and no token is reachable. The graceful-degradation path described above is therefore a **safety net**, not the primary path — if you reach this skill with a video jam and no token, it means either (a) the Hand bypassed the preflight via `THK_SKIP_JAM_FRAMES=1` (user opted in to missing frames), or (b) a token that was present at preflight time was deleted before the skill ran. In both cases, degrade gracefully: produce everything else, mark `framesAvailable: false`, and continue.
+
 ## What's captured
 
 - **Details** (overview, bug type) — always.

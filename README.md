@@ -155,6 +155,40 @@ The repo-local config is what `install.sh` writes; you can also hand-edit it. Ev
 | `mcps.captures` | Optional capture MCPs to enable. Skills check this when deciding whether to dispatch the matching capture. |
 | `profiles` | Per-profile role overrides — same shape as the built-ins; merges over them rather than replacing. |
 
+`config.json` is **per-developer** (profile preferences, machine-specific). It's gitignored.
+
+### Schema — `<repo>/.thk/policies.json` (team-shared)
+
+Project-specific safety + workflow rules that thk consults at runtime. **This file is committed** — `install.sh` and `_scaffold-session` set up the gitignore so `.thk/policies.json` is excepted from the broad `.thk/` exclude.
+
+```json
+{
+  "_meta": {
+    "generatedBy": "_run-verification",
+    "generatedAt": "2026-04-27T22:30:00Z",
+    "inferenceSource": "lockfile=pnpm-lock.yaml + package.json scripts",
+    "note": "Edit freely. thk reads this verbatim on subsequent runs. Hand-edited values are NOT overwritten — auto-bootstrap only fills missing keys."
+  },
+  "verification": {
+    "install":   "pnpm install --frozen-lockfile",
+    "typecheck": "pnpm exec tsc --noEmit",
+    "build":     "pnpm run build",
+    "test":      null
+  },
+  "planetscale": {
+    "banned_tables": ["employee", "employees", "hr.employees"]
+  }
+}
+```
+
+| Key | Written by | Purpose |
+|-----|-----------|---------|
+| `verification.install` / `.typecheck` / `.build` / `.test` | `_run-verification` (auto-bootstrap) | Exact commands the verification gauntlet runs. `null` = skip explicitly. Auto-inferred from lockfile + package.json scripts on first run; team can edit and commit. |
+| `planetscale.banned_tables` | `_capture-planetscale` (auto-bootstrap from AGENTS.md prose) | Tables that are off-limits to any `_capture-planetscale` query — case-insensitive match across bare / schema-qualified / aliased / subquery / CTE forms. |
+| `_meta.*` | Whichever skill last wrote | Audit trail — when, why, from what source. |
+
+**Auto-bootstrap behavior.** Skills that consult policies follow the same rule: if the relevant key is missing from `policies.json`, infer or extract it (from `package.json` for verification, from `AGENTS.md` for planetscale bans), persist the result, then proceed. Hand-edited values are never overwritten — only missing keys get filled. Subsequent runs read the file verbatim.
+
 ## Updating
 
 ```

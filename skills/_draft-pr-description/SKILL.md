@@ -79,8 +79,7 @@ The full plan (with bundled context — Linear thread, Jam recordings, Figma des
 
 - [ ] <test scenario 1>
 - [ ] <test scenario 2>
-- [ ] `pnpm tsc --noEmit` passes
-- [ ] `pnpm run build` passes
+- [ ] Verification gauntlet passes (whatever `_run-verification` resolved for this project — substitute the literal commands here, e.g. `pnpm tsc --noEmit && pnpm run build` or `npm run typecheck && npm run build` or `cargo check && cargo build`. Read them out of the run's logs.)
 
 ## Deviations from the plan
 

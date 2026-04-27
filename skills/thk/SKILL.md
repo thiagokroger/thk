@@ -98,6 +98,7 @@ The King invokes `/thk <ticket-url>` and then steps away. You run every step wit
 - The Council was summoned but plan-phase deliberation failed unrecoverably. Write `context/outcome.md` with status `plan-published-review-failed` documenting which step failed; the published issue is still a valid handoff artifact, so this is an acceptable degraded terminal state. (Note: this is the *plan-phase* failure case — diff-phase failures land in `pre-pr-review-failed` instead.)
 - The captured context shows the issue is **already fixed** → write `context/outcome.md` (status `already-fixed`), stop.
 - The captured context is **missing critical information** → write `context/outcome.md` (status `needs-more-info`) listing what's needed, stop.
+- **A capture preflight needs a missing secret** (today: Jam token for video jams) → write `context/outcome.md` (status `needs-jam-token`) with explicit drop-in instructions, stop. Re-invoking after the user provides the secret resumes the run from the preflight.
 - A dispatched member returns a blocking failure **before the plan is published** → write `context/outcome.md`, stop.
 
 No mid-run interaction. The King reads `progress.md` and (if present) `outcome.md` afterward.
@@ -110,6 +111,7 @@ You handle every entry condition the King throws at you. Before doing any work, 
 2. `ls <targetRepo>/.thk/sessions/` and find directories ending in `_<slug>`, most recent first.
 3. For each match, read `progress.md` and inspect `status`:
    - **Terminal — skip and look for an older session, or mint a new one if none remain:** `pr-drafted`, `execution-failed`, `pre-pr-review-failed`, `plan-published-review-failed`, `already-fixed`, `needs-more-info`, `failed`.
+   - **Fixable — resume in place if the user has addressed the blocker:** `needs-jam-token`. Re-check the preflight at Step 1c.5; if it now passes, continue from Step 1d. If still missing, refuse to mint a new session — point the user back at the existing `outcome.md`.
    - **Resumable — pick up at the first incomplete step:** `in-progress`, `plan-published`, `plan-finalized`, `plan-reviewed`. The flow continues through to Step 7 (Draft PR) regardless of whether the meeting was convened.
 4. If no resumable session exists, mint a new `session-id` and start fresh from Step 0.
 
@@ -196,6 +198,73 @@ Read the Linear files the Whisperer just wrote under `<contextDir>/linear/`. Ext
 - Every `figma.com/...` URL (design, make, or board)
 
 De-duplicate. URL-driven capture only — **do not plan database queries here.** Database lookups are the Grand Maester's judgment call and run later inside `convene-meeting` if you summon and he decides the ticket warrants one.
+
+### 1c.5 — Preflight: secrets needed for capture
+
+Before fanning out captures, check that any secrets the captures will require are actually present. If something is missing, **halt with an actionable outcome rather than degrading silently** — the capture would otherwise produce a half-complete `context/` folder and the user wouldn't notice until reviewing the GitHub issue.
+
+Today the only check is **Jam token for video Jams**. Other secrets may join later (e.g., when ticket-source MCPs need bearer tokens beyond what the MCP host already manages).
+
+#### Jam video-frame extraction
+
+For each `jam.dev/...` URL harvested in 1c, query the Jam MCP for type:
+
+```
+mcp__Jam__getDetails(jamUrl: "<u>")  → { kind: "video" | "screenshot", ... }
+```
+
+(Or `getMetadata` — whichever returns the type signal.)
+
+If **none** of the harvested Jam URLs are video jams → no token required, continue to Step 1d.
+
+If **any** are video jams, check token availability in this order — first hit wins:
+
+1. `$JAM_TOKEN` environment variable.
+2. `<targetRepo>/.thk/keys/jam.key` — file exists and is non-empty.
+3. `~/.jamtoken` — file exists and is non-empty.
+
+Use a short bash check (`[ -n "${JAM_TOKEN:-}" ] || [ -s <repo>/.thk/keys/jam.key ] || [ -s ~/.jamtoken ]`) to determine presence — don't read the token's value, just whether it's there.
+
+**If a video jam exists AND no token is present** → write `<contextDir>/outcome.md` with status `needs-jam-token`:
+
+```markdown
+# Outcome — needs-jam-token
+
+The captured ticket references one or more Jam **video** recordings:
+
+- <video-jam-url-1>
+- <video-jam-url-2>
+
+`_capture-jam` needs a Jam personal access token to extract video frames at WebVTT cue
+timestamps. Without it, the transcript is captured but `screenshots/` will be empty —
+which means downstream reviewers (and the published GitHub issue) won't see any
+visual evidence from the video.
+
+## How to fix
+
+Generate a Jam personal access token at https://jam.dev/account/api-keys, then drop it
+in **one** of these places (first hit wins):
+
+| Where | When to use |
+|-------|-------------|
+| `export JAM_TOKEN=<token>` (then re-launch Claude Code) | Per-session, ad-hoc |
+| `<targetRepo>/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here |
+| `~/.jamtoken` (chmod 600) | User-global, all repos |
+
+Then re-invoke `/thk <same-ticket-url>` — this session resumes from Step 1c.5 and proceeds normally.
+
+## How to skip (not recommended)
+
+If you genuinely don't want the frames for this ticket, set `THK_SKIP_JAM_FRAMES=1` and
+re-invoke. Captures will run with `framesAvailable: false` and the GitHub issue will
+indicate the gap. The plan and Council deliberation can still proceed without frames.
+```
+
+Set `progress.md` status `needs-jam-token`. **Stop.**
+
+This terminal is **fixable, not failed** — the user adds the token and re-runs; the Hand resumes from this preflight, which now passes, and the run continues.
+
+If `THK_SKIP_JAM_FRAMES=1` is set on the current invocation, skip the halt: log a `decision` line acknowledging frames will be missing, and proceed to Step 1d. `_capture-jam` will return `framesAvailable: false` per its existing graceful-degradation path.
 
 ### 1d. Swarm of Whisperers (parallel)
 
@@ -519,16 +588,20 @@ The Counselor is *not* dispatched ad-hoc — by design, it runs only as the clos
 **Ticket URL:** <url>
 **Started:** <ISO 8601>
 **Last updated:** <ISO 8601>
-**Status:** in-progress | plan-published | plan-finalized | plan-reviewed | plan-published-review-failed | execution-failed | pre-pr-review-failed | pr-drafted | already-fixed | needs-more-info | failed
+**Status:** in-progress | plan-published | plan-finalized | plan-reviewed | plan-published-review-failed | execution-failed | pre-pr-review-failed | pr-drafted | already-fixed | needs-more-info | needs-jam-token | failed
 **Runtime profile:** <selected_profile>
 
 ## Steps
 
 ### 1 — Capture
-- State: pending | in-progress | done | failed
+- State: pending | in-progress | done | needs-jam-token | failed
 - Completed: <ISO>
 - Assigner: <name>
 - Summary: <counts>
+- Preflight (Step 1c.5):
+  - Video jams found: <count>
+  - Jam token source: env JAM_TOKEN | <repo>/.thk/keys/jam.key | ~/.jamtoken | none
+  - Outcome: passed | halted (needs-jam-token) | bypassed (THK_SKIP_JAM_FRAMES=1)
 
 ### 2a — Plan draft
 - State: ...
@@ -648,6 +721,7 @@ Later iterations may add:
 - The GitHub issue is the durable revision log. After any substantive plan change, dispatch `update-github-issue` once — do not batch many revisions locally, and do not re-dispatch per-review-item, because each `update-github-issue` call is one row in the issue's edit history that future maintainers will read.
 - Every piece of evidence must be on disk under `<contextDir>/`, and every file under `<contextDir>/` (except `outcome.md`) must end up committed to the repo by `publish-plan-to-github`. The published issue must stand on its own: a downstream execution agent with no MCPs, or a human developer on a different machine, must be able to ship from the issue + the repo alone. The handoff bar is absolute even when the Council is skipped.
 - If the captured context is enough to write a plan, write it. Only emit `needs-more-info` if drafting would be guessing.
+- **Halt on missing secrets, don't silently degrade.** If a capture needs a credential the user hasn't provided (today: Jam token for video jams), halt the run at the preflight (Step 1c.5) with a `needs-<thing>` outcome status and exact drop-in instructions. Producing a half-complete `context/` and proceeding would land in a half-complete GitHub issue without anyone noticing — worse than stopping. The escape hatch (`THK_SKIP_<...>`) exists only when the user explicitly opts in.
 - **You decide whether to convene a meeting at Step 3.** It's all-or-nothing — once you convene, both phases run (plan side at Step 3, diff side at Step 6). Be conservative — review is cheap, missed concerns are not. Default to convene when in doubt; skip only when every signal in Step 3's checklist points at "trivial".
 - **The no-meeting path still gets a Counselor pass at Step 6.** "No meeting" doesn't mean "no review" — it just means a single Counselor sanity check on the diff instead of full Council rounds. Skipping that check would let regressions slip through.
 - **Council members are dispatchable ad-hoc at any step**, regardless of whether you convened a meeting. See the "Ad-hoc council consults" section. The Counselor is the exception — it runs only as the closer of a deliberation.

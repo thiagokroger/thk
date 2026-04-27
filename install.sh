@@ -290,40 +290,52 @@ fi
 # resolved runtime profile, and the optional keys/ secrets dir under .thk/.
 # Without the gitignore entry these show up in `git status` and risk being
 # committed.
+#
+# Special case: .thk/policies.json IS team-shared (banned tables, verification
+# commands) and SHOULD be committed. We add an exception for it.
 step ".gitignore check"
 GITIGNORE="$TARGET_REPO/.gitignore"
-LINE=".thk/"
+GITIGNORE_MARKER="# thk session state — .thk/ is per-developer except policies.json (team-shared)"
 
-if [ -f "$GITIGNORE" ] && grep -qxF "$LINE" "$GITIGNORE"; then
-  ok ".gitignore already excludes $LINE"
+if [ -f "$GITIGNORE" ] && grep -qxF "$GITIGNORE_MARKER" "$GITIGNORE"; then
+  ok ".gitignore already has the thk block"
 else
   if [ -f "$GITIGNORE" ]; then
-    info "$LINE not found in $GITIGNORE"
+    info "thk block not found in $GITIGNORE"
   else
     info "no .gitignore at $TARGET_REPO"
   fi
-  info "$(dim "(recommended — keeps sessions, secret keys, and runtime state out of git)")"
+  info "$(dim "(recommended — keeps sessions / secrets / runtime state out of git, while preserving policies.json as team-shared)")"
 
   # Default to yes. Non-interactive mode auto-adds (the recommended path).
   ADD_GITIGNORE=1
   if [ "$NON_INTERACTIVE" = 0 ]; then
     if [ "$USE_GUM" = 1 ]; then
-      gum confirm --default=true "Add $LINE to .gitignore?" || ADD_GITIGNORE=0
+      gum confirm --default=true "Add the thk block to .gitignore?" || ADD_GITIGNORE=0
     else
-      read -r -p "  Add $LINE to .gitignore? [Y/n] " reply
+      read -r -p "  Add the thk block to .gitignore? [Y/n] " reply
       [[ "$reply" =~ ^[Nn]$ ]] && ADD_GITIGNORE=0
     fi
   fi
 
   if [ "$ADD_GITIGNORE" = 1 ]; then
-    # If file exists and doesn't end in newline, add one before our entry
+    # If file exists and doesn't end in newline, add one before our block
     if [ -f "$GITIGNORE" ] && [ -s "$GITIGNORE" ] && [ -n "$(tail -c 1 "$GITIGNORE" 2>/dev/null)" ]; then
       printf "\n" >> "$GITIGNORE"
     fi
-    printf "%s\n" "$LINE" >> "$GITIGNORE"
-    ok "added $LINE to .gitignore"
+    cat >> "$GITIGNORE" <<EOF
+$GITIGNORE_MARKER
+.thk/
+!.thk/policies.json
+EOF
+    ok "added .thk/ (with !.thk/policies.json exception) to .gitignore"
   else
-    warn "skipped — $LINE will appear in 'git status'. Run: echo '$LINE' >> .gitignore"
+    warn "skipped — .thk/ will appear in 'git status'. Run:"
+    warn "    cat >> .gitignore <<'EOF'"
+    warn "    $GITIGNORE_MARKER"
+    warn "    .thk/"
+    warn "    !.thk/policies.json"
+    warn "    EOF"
   fi
 fi
 

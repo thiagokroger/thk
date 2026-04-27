@@ -27,7 +27,41 @@ Runs a scoped, read-only query to surface a specific slice of production data th
    `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `REPLACE`, `TRUNCATE`, `CREATE`, `ALTER`, `DROP`, `RENAME`, `GRANT`, `REVOKE`, `CALL`, `EXECUTE`, `PREPARE`, `INTO OUTFILE`, `INTO DUMPFILE`, `LOAD_FILE`, `SLEEP(`.
 4. **Row limit.** If the query lacks an explicit `LIMIT`, append `LIMIT 100`. Never run an unbounded scan as context.
 5. **Purpose required.** If `purpose` is missing or generic ("just checking"), reject.
-6. **Banned tables.** The query must not reference the `employee` or `employees` tables (case-insensitive, including schema-qualified forms like `hr.employees`, aliased forms like `employees e`, and any subquery or CTE reading from them). These tables hold sensitive HR data and are off-limits regardless of purpose — no exceptions, no "read only one column", no workarounds. If matched, reject with reason `banned table: employee(s)`.
+6. **Project-banned tables (read from the target repo, not hardcoded here).** thk ships **no** project-specific table ban list — those vary by codebase. Before executing the query, read `<workdir>/AGENTS.md` (resolving any `@<file>` imports like `@AGENTS.md`) and look for a thk-specific safety section that declares banned tables. Common section headings to look for (case-insensitive):
+
+   - `## thk: planetscale` / `## thk policies` / `## thk safety`
+   - Any line of the form `Banned tables:` / `Off-limits tables:` / `PII tables:` followed by a comma-separated list
+
+   If a structured config file `<workdir>/.thk/policies.json` exists, also honor:
+
+   ```json
+   {
+     "planetscale": {
+       "banned_tables": ["<table-name>", "<schema>.<table>", ...]
+     }
+   }
+   ```
+
+   The effective ban list is the **union** of AGENTS.md declarations and the JSON config (when both exist).
+
+   Apply each declared ban case-insensitively and across **all** reference forms a SQL parser would recognize: bare (`<table>`), schema-qualified (`<schema>.<table>`), aliased (`<table> a` or `<table> AS a`), within subqueries, and within CTEs. If a match occurs anywhere, reject with reason `banned table: <table-name> (per <source>)` where `<source>` is `AGENTS.md` or `.thk/policies.json` depending on which declared it.
+
+   If neither source declares any bans, this gate is a no-op — only the universal safety checks above apply.
+
+   **Auto-mirror AGENTS.md → `policies.json` (first-run bootstrap).** When AGENTS.md declares bans in prose but `<workdir>/.thk/policies.json` doesn't yet have a `planetscale.banned_tables` entry, write a structured mirror of the prose declaration into `policies.json` so:
+
+   - Future runs are deterministic (parsing AGENTS.md prose every time is fragile).
+   - The team gets a machine-readable copy they can commit and version.
+   - A reviewer skimming `policies.json` sees the safety rules without having to scan AGENTS.md.
+
+   Behavior, identical to `_run-verification`'s auto-drop:
+
+   - If `policies.json` doesn't exist → create with a `_meta` block + the `planetscale.banned_tables` block.
+   - If it exists but lacks `planetscale.banned_tables` → merge in just that key.
+   - If `planetscale.banned_tables` already exists → leave it alone (the human-edited value wins).
+   - Log a one-line stderr notice when a write happens: `_capture-planetscale: mirrored <N> banned tables from AGENTS.md → <workdir>/.thk/policies.json. Review and commit.`
+
+   The merged file uses the same shape as `_run-verification`'s auto-drop — both skills coexist by writing different top-level keys (`verification.*` vs `planetscale.*`) into the same JSON.
 
 If any check fails → return `{ error: "query rejected: <reason>" }`. Do not execute.
 
