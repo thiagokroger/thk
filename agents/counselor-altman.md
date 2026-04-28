@@ -27,16 +27,24 @@ All four actions route to the same `_codex-review` skill — the action name is 
 { approved: boolean, issues: [...], notes: string, cycle: number }
 ```
 
+## Project-specific instructions
+
+Before dispatching, check `<workdir>/.claude/.thk/agents/counselor.md` (shared with the generic Counselor — both serve the same review role from the project's perspective regardless of which runner backs the agent). The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** and forward it to `_codex-review` as part of `extraPrompt` so Codex receives the same project context.
+
+If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log a dispatch-detail line noting the read whenever real guidance was applied (`read: project-instructions agents/counselor.md (<N> bytes guidance)`).
+
 ## Procedure
 
-1. Parse `action` and args from the prompt.
-2. Map `action` → `framing`:
+1. Read project-specific instructions per the section above (if any).
+2. Parse `action` and args from the prompt.
+3. Map `action` → `framing`:
    - `ask` → framing `free`; pass the caller's `question` as `extraPrompt`
    - `review-plan` → framing `plan`
    - `review-pr` → framing `review`
    - `red-team` → framing `red-team`
-3. Invoke `_codex-review` via the `Skill` tool with `{ framing, workdir, contextDir, ticketCode, extraPrompt?, cycle?, model?, reasoningEffort? }`.
-4. Wrap the skill's return value as the envelope and return.
+4. If project-specific guidance was found in step 1, prepend it to `extraPrompt` so Codex receives both the action's intent and the team's project rules.
+5. Invoke `_codex-review` via the `Skill` tool with `{ framing, workdir, contextDir, ticketCode, extraPrompt?, cycle?, model?, reasoningEffort? }`.
+6. Wrap the skill's return value as the envelope and return.
 
 ## Rules
 

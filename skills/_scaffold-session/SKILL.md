@@ -18,29 +18,34 @@ description: Create the session folder layout at an absolute path — `<sessionP
 }
 ```
 
-All four paths are absolute. The session lives under `<targetRepo>/.claude/.thk/sessions/<sessionId>` — **inside** the target repo. Most of `.claude/.thk/` must be excluded by git so session folders, secrets, and per-developer config don't show up in `git status`. **One file is the exception: `<targetRepo>/.claude/.thk/policies.json` — that's team-shared (banned tables, verification commands) and SHOULD be committed.**
+All four paths are absolute. The session lives under `<targetRepo>/.claude/.thk/sessions/<sessionId>` — **inside** the target repo. Most of `.claude/.thk/` must be excluded by git so session folders, secrets, and per-developer config don't show up in `git status`. **Two paths are exceptions and SHOULD be committed:**
+
+- `<targetRepo>/.claude/.thk/policies.json` — team-shared rules (banned tables, verification commands, revisit policy).
+- `<targetRepo>/.claude/.thk/agents/*.md` — per-agent project instructions. One file per council member — placeholders are bootstrapped here on first run; the team fills them in over time with project-specific guidance.
 
 `install.sh` writes the right lines on guided setup. For users who installed via the Claude Code marketplace and never ran the script, this skill is the backstop — it auto-adds the exclude block on first run.
 
 ## Procedure
 
 ```bash
-# Ensure .claude/.thk/ is gitignored EXCEPT policies.json (team-shared rules).
-# The marketplace install path skips install.sh entirely, so this skill is
-# the second line of defense.
+# Ensure .claude/.thk/ is gitignored EXCEPT the team-shared bits:
+#  - policies.json
+#  - agents/<member>.md (per-agent project instructions)
 #
-# Strategy: a 2-line block that excludes everything under .claude/.thk/ but
-# preserves .claude/.thk/policies.json. The block is idempotent — we check for
-# the marker comment before appending.
-GITIGNORE_MARKER='# thk session state — .claude/.thk/ is per-developer except policies.json (team-shared)'
+# The marketplace install path skips install.sh entirely, so this skill is
+# the second line of defense. Pattern uses `.claude/.thk/*` (with star) so
+# the directory itself stays includable — that's the only form where `!`
+# negations on contents actually work; without the star, git treats the
+# whole directory as excluded and refuses to re-include children.
+GITIGNORE_MARKER='# thk session state — .claude/.thk/ is per-developer except policies.json + agents/*.md (team-shared)'
 if grep -qxF "$GITIGNORE_MARKER" <targetRepo>/.gitignore 2>/dev/null; then
   : # already added by us (or install.sh) — no-op
 elif grep -qxF '.claude/.thk/' <targetRepo>/.git/info/exclude 2>/dev/null \
      && ! grep -qxF '.claude/.thk/' <targetRepo>/.gitignore 2>/dev/null; then
   : # User opted into the repo-local exclude list explicitly. Respect that
-    # signal — but note: policies.json won't be committable that way unless
-    # the user adds an exception themselves. Log a one-line tip to stderr.
-  echo "scaffold-session: '.claude/.thk/' is in .git/info/exclude (per-developer ignore). To share thk policies with the team, move the exclude to .gitignore — this skill will rewrite it on next run if you remove the .git/info/exclude line." >&2
+    # signal — but note: policies.json + agents/*.md won't be committable
+    # that way unless the user adds exceptions themselves. Log a tip.
+  echo "scaffold-session: '.claude/.thk/' is in .git/info/exclude (per-developer ignore). To share thk policies + per-agent instructions with the team, move the exclude to .gitignore — this skill will rewrite it on next run if you remove the .git/info/exclude line." >&2
 else
   # If .gitignore exists and lacks a trailing newline, add one before the block
   if [ -f <targetRepo>/.gitignore ] && [ -s <targetRepo>/.gitignore ] \
@@ -48,12 +53,26 @@ else
     printf "\n" >> <targetRepo>/.gitignore
   fi
   cat >> <targetRepo>/.gitignore <<'IGNORE'
-# thk session state — .claude/.thk/ is per-developer except policies.json (team-shared)
-.claude/.thk/
+# thk session state — .claude/.thk/ is per-developer except policies.json + agents/*.md (team-shared)
+.claude/.thk/*
 !.claude/.thk/policies.json
+!.claude/.thk/agents/
+!.claude/.thk/agents/*.md
 IGNORE
-  echo "scaffold-session: added '.claude/.thk/' (with '!.claude/.thk/policies.json' exception) to <targetRepo>/.gitignore." >&2
+  echo "scaffold-session: added '.claude/.thk/' exclude block (with policies.json + agents/*.md exceptions) to <targetRepo>/.gitignore." >&2
 fi
+
+# Bootstrap per-agent project-instruction placeholders. Idempotent — never
+# overwrites a file that already exists (the team may have hand-edited it).
+# Each placeholder is a single HTML comment explaining what kind of guidance
+# fits; agents treat a comment-only file as "no project instructions yet" and
+# fall through to their built-in defaults.
+mkdir -p <targetRepo>/.claude/.thk/agents
+for member in master-of-whisperers master-of-ships grand-maester master-of-laws lord-commander master-of-coin counselor; do
+  target="<targetRepo>/.claude/.thk/agents/${member}.md"
+  [ -f "$target" ] && continue
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/write-agent-placeholder.sh" "$member" "$target"
+done
 
 mkdir -p \
   <sessionPath>/context/plan-reviews/round-1-plan \

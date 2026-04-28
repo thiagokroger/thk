@@ -295,6 +295,20 @@ Adding a new **runner or advisor**:
 
 Adding a new **council member** (a new office) is a larger architectural change — those six roles are intentionally stable. Advisors are the lightweight extension point.
 
+## Per-agent project instructions
+
+Each council member has a markdown file at `<repo>/.claude/.thk/agents/<member>.md` where the team can drop project-specific guidance. `_scaffold-session` bootstraps seven placeholder files on first run — one per member, each containing a single HTML comment explaining what kind of guidance fits there. Agents read their file at the start of every dispatch and forward any non-comment content to the dispatched skill under `projectInstructions:` so the guidance reaches the layer that can act on it.
+
+The mechanism is a per-repo extension surface that complements the global agent definitions in `agents/*.md` (the plugin's defaults) and `policies.json` (structured rules). Three escape hatches with three audiences:
+
+- `agents/*.md` (this repo) — defaults applied to every project, edited by thk maintainers.
+- `<repo>/.claude/.thk/policies.json` — structured rules (banned tables, verification commands, revisit thresholds), edited by repo teams.
+- `<repo>/.claude/.thk/agents/<member>.md` — freeform per-agent prose, edited by repo teams.
+
+`policies.json` is for facts the agent must enforce verbatim; the per-agent markdown file is for nuance, conventions, and judgment calls that don't fit a structured schema. Agents apply both alongside their built-in defaults.
+
+The placeholder files are team-shared (gitignore exception) — `_scaffold-session` adds the appropriate `!.claude/.thk/agents/*.md` rule to `<repo>/.gitignore` so they're committable. Agents never overwrite a user-edited file; the bootstrap is one-time per fresh session-scaffold.
+
 ## Running thk from a different repo
 
 thk is repo-agnostic *as a skill package* — the skills reference `workdir` as an argument, with no hard-coded paths. But the MCP servers (Linear, Jam, Figma, PlanetScale, GitHub, Notion) are defined at the launching-Claude-Code level, so if a team uses Jira instead of Linear, the `capture-linear` skill won't apply — a `capture-jira` skill would need to exist first.

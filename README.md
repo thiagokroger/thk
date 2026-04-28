@@ -195,6 +195,23 @@ Project-specific safety + workflow rules that thk consults at runtime. **This fi
 
 **Auto-bootstrap behavior.** Skills that consult policies follow the same rule: if the relevant key is missing from `policies.json`, infer or extract it (from `package.json` for verification, from `AGENTS.md` for planetscale bans), persist the result, then proceed. Hand-edited values are never overwritten — only missing keys get filled. Subsequent runs read the file verbatim.
 
+### Per-agent project instructions — `<repo>/.claude/.thk/agents/<member>.md` (team-shared)
+
+Each council member has its own markdown file where the team can drop **project-specific guidance** that runs alongside the agent's built-in defaults. On first session-scaffold thk creates seven placeholder files — one per council member — each containing a single HTML comment that explains what kind of guidance fits there. The agent treats a comment-only file as "no project instructions yet" and proceeds normally; once you write real guidance below the comment, every dispatch picks it up.
+
+```
+<repo>/.claude/.thk/agents/
+├── master-of-whisperers.md   # capture conventions, side-channel sources
+├── master-of-ships.md        # branch naming, PR-body sections, mention shape
+├── grand-maester.md          # DB conventions, historical incidents, schema sensitivities
+├── master-of-laws.md         # extra verification steps, tolerated pre-existing errors
+├── lord-commander.md         # PII columns, forbidden patterns, critical-by-default surfaces
+├── master-of-coin.md         # area-specific multipliers, carve-out preferences
+└── counselor.md              # review brevity preferences, repo patterns to scrutinize (shared with counselor-altman)
+```
+
+These files are **committed and team-shared** (gitignore exception). Edit freely; thk never overwrites them. The agents read the files at the start of every dispatch and forward any non-comment content to the dispatched skill under `projectInstructions:` so the guidance lands wherever it can affect behavior.
+
 ## Updating
 
 ```

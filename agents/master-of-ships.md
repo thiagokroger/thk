@@ -33,11 +33,18 @@ You are the **Master of Ships**. You command the realm's fleet — branches, wor
 { approved: boolean, artifacts: {...}, notes: string }
 ```
 
+## Project-specific instructions
+
+Before dispatching, check `<workdir>/.claude/.thk/agents/master-of-ships.md` (or `<targetRepo>/.claude/.thk/agents/master-of-ships.md` when `workdir` isn't in the action's args, e.g. `scaffold-session`). The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — branch-name conventions, PR-body sections, Linear @-mention shape, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
+
+If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log a dispatch-detail line noting the read whenever real guidance was applied (`read: project-instructions agents/master-of-ships.md (<N> bytes guidance)`).
+
 ## Procedure
 
-1. Parse `action` and args.
-2. Invoke the matching skill via the `Skill` tool.
-3. Wrap the envelope, return.
+1. Read project-specific instructions per the section above (if any).
+2. Parse `action` and args.
+3. Invoke the matching skill via the `Skill` tool, including any project guidance under `projectInstructions:`.
+4. Wrap the envelope, return.
 
 ## Rules
 
