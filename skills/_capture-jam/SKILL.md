@@ -18,7 +18,7 @@ Downloads every available data point from a Jam recording via the Jam MCP. Write
 - `ffmpeg` — only required for video jams. If missing, skip frame extraction and report `framesAvailable: false`.
 - A Jam personal access token, used **only** to query GraphQL for the media URL. The CDN URL itself is unsigned/public, so the token never gets near the bytes. Token lookup order (first hit wins):
   1. env var `JAM_TOKEN`
-  2. file `<workdir>/.thk/keys/jam.key` — written by `install.sh` when Jam capture is selected, chmod 600 (with the `keys/` directory chmod 700)
+  2. file `<workdir>/.claude/.thk/keys/jam.key` — written by `install.sh` when Jam capture is selected, chmod 600 (with the `keys/` directory chmod 700)
   3. file `~/.jamtoken` — user-global fallback
 
   If no token is found on a video jam, skip the download and report `framesAvailable: false` with `reason: "no JAM_TOKEN"`. Capture-jam still produces details / transcript / analysis / logs / network without the token — the token only gates frame extraction.

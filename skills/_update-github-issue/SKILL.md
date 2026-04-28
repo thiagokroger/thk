@@ -50,7 +50,7 @@ On any failure, return `{ error: "<reason>" }`.
 
 ### 2. Derive session-id
 
-Same rule as `publish-plan-to-github`: second-to-last segment of `<contextDir>` (e.g. `<targetRepo>/.thk/sessions/<session-id>/context` → `<session-id>`). Fall back to a slug if the path doesn't match that shape.
+Same rule as `publish-plan-to-github`: second-to-last segment of `<contextDir>` (e.g. `<targetRepo>/.claude/.thk/sessions/<session-id>/context` → `<session-id>`). Fall back to a slug if the path doesn't match that shape.
 
 ### 3. Sync the assets worktree with origin's ref tip
 
@@ -68,16 +68,20 @@ fi
 
 ### 4. Rebundle the FULL context folder + session log
 
-Mirror `publish-plan-to-github`: copy every file under `<contextDir>/` (excluding `outcome.md`) into `.github/thk-assets/<session-id>/context/`, AND copy the session log as a peer:
+Mirror `publish-plan-to-github`: copy every file under `<contextDir>/` (excluding `outcome.md`) into `.github/thk-assets/<session-id>/context/`, AND copy the three session-metadata peers (log, progress, runtime-profile) so the bundle carries the latest state for resume + rehydration:
 
 ```bash
 cd <assetsWorkdir>
 cp -R <contextDir>/. .github/thk-assets/<session-id>/context/
 rm -f .github/thk-assets/<session-id>/context/outcome.md
 session_root="$(dirname "$contextDir")"
-[ -f "$session_root/log.md" ] && cp "$session_root/log.md" .github/thk-assets/<session-id>/session-log.md
+[ -f "$session_root/log.md" ]              && cp "$session_root/log.md"              .github/thk-assets/<session-id>/session-log.md
+[ -f "$session_root/progress.md" ]         && cp "$session_root/progress.md"         .github/thk-assets/<session-id>/session-progress.md
+[ -f "$session_root/runtime-profile.json" ] && cp "$session_root/runtime-profile.json" .github/thk-assets/<session-id>/session-runtime-profile.json
 git add .github/thk-assets/<session-id>/
 ```
+
+Updating these on every push means `_thk/SKILL.md` Step 1.5's rehydration path reads the most recent `progress.md` from the bundle — not a stale snapshot from the initial publish.
 
 - Stage explicit path only; never `git add .`.
 - If nothing changed: `git diff --cached --quiet` returns 0 → skip commit/push, use the current ref-tip SHA as `assetsSha`, set `attachmentDelta: 0`. The issue body still gets regenerated because the caller may have edited `plan.md`.

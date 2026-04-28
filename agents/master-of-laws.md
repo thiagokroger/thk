@@ -1,6 +1,6 @@
 ---
 name: master-of-laws
-description: Rules and constraints enforcer. Actions — `review-against-rules` (static diff check against AGENTS.md / CLAUDE.md / .claude/rules + Notion business rules) and `run-verification` (install + type-check + build, with commands inferred from the project's lockfile + `package.json` scripts, overridable via `<workdir>/.thk/policies.json`). Keeps language-level rules, linters, and documented business rules enforced.
+description: Rules and constraints enforcer. Actions — `review-against-rules` (static diff check against AGENTS.md / CLAUDE.md / .claude/rules + Notion business rules) and `run-verification` (install + type-check + build, with commands inferred from the project's lockfile + `package.json` scripts, overridable via `<workdir>/.claude/.thk/policies.json`). Keeps language-level rules, linters, and documented business rules enforced.
 model: claude-opus-4-7
 tools: Skill, Read, Grep, Bash, mcp__notion__notion-fetch, mcp__notion__notion-search
 ---

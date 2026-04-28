@@ -36,13 +36,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-profile.mjs" --target-repo "<targetR
 
 Keep the JSON result as `runtimeProfile`. After `sessionPath` exists, write the same JSON to `<sessionPath>/runtime-profile.json` and note `selected_profile` plus any `warnings[]` in `progress.md`.
 
-Profile config is resolved in this order:
+Profile config is resolved in this order (thk is per-project — no home-dir state):
 
-1. `${CLAUDE_PLUGIN_ROOT}/config/profiles.json`
-2. `$THK_CONFIG`, if set
-3. `$HOME/.thk/config.json`
-4. `$HOME/.claude/thk/config.json`
-5. `<targetRepo>/.thk/config.json`
+1. `${CLAUDE_PLUGIN_ROOT}/config/profiles.json` (built-in defaults)
+2. `$THK_CONFIG`, if set (explicit override)
+3. `<targetRepo>/.claude/.thk/config.json` (committed alongside the project — what `install.sh` writes)
 
 ### Profile-aware dispatch
 
@@ -59,10 +57,10 @@ In the Claude plugin frontend, `hand.runner` is a cross-frontend declaration onl
 
 ## Sessions
 
-Every invocation runs inside a **session folder** at `<targetRepo>/.thk/sessions/<session-id>/`:
+Every invocation runs inside a **session folder** at `<targetRepo>/.claude/.thk/sessions/<session-id>/`:
 
 ```
-<targetRepo>/.thk/sessions/<session-id>/
+<targetRepo>/.claude/.thk/sessions/<session-id>/
 ├── progress.md              ← step tracker (you maintain this)
 ├── runtime-profile.json     ← selected profile snapshot for deterministic resume
 ├── worktree/                ← code worktree on the session branch (created by Ships `scaffold-session`)
@@ -86,7 +84,7 @@ Every invocation runs inside a **session folder** at `<targetRepo>/.thk/sessions
 
 **Session ID format:** `<YYYY-MM-DD>_<HHMMSS>_<slug>` — e.g. `2026-04-22_143000_eng-10105`.
 
-Sessions live under `<targetRepo>/.thk/sessions/` — inside the target repo. `.thk/` is excluded by git so sessions stay out of `git status`. `install.sh` is the canonical place for that exclude (it prompts during setup), but for users who install via the Claude Code marketplace alone, `scaffold-session` auto-adds `.thk/` to `.gitignore` on first run as a backstop. The plugin install (at `${CLAUDE_PLUGIN_ROOT}`) is separate and untouched by session state.
+Sessions live under `<targetRepo>/.claude/.thk/sessions/` — inside the target repo. `.claude/.thk/` is excluded by git so sessions stay out of `git status`. `install.sh` is the canonical place for that exclude (it prompts during setup), but for users who install via the Claude Code marketplace alone, `scaffold-session` auto-adds `.claude/.thk/` to `.gitignore` on first run as a backstop. The plugin install (at `${CLAUDE_PLUGIN_ROOT}`) is separate and untouched by session state.
 
 ## Single-call execution
 
@@ -96,6 +94,7 @@ The King invokes `/thk <ticket-url>` and then steps away. You run every step wit
 - **Execution failed** (verification couldn't be made green within the retry cap, or the plan's assumed file shape diverged from reality). Write `context/outcome.md` with status `execution-failed`. The published issue + Council reviews remain valid; the King decides whether to revise the plan or implement manually.
 - **Pre-PR review failed** (Step 6 — Counselor flagged unfixable issues, OR meeting diff phase couldn't converge). Write `context/outcome.md` with status `pre-pr-review-failed` and the last error. The implementation lives on the worktree; the King can pick up manually or re-invoke after revising the plan.
 - The Council was summoned but plan-phase deliberation failed unrecoverably. Write `context/outcome.md` with status `plan-published-review-failed` documenting which step failed; the published issue is still a valid handoff artifact, so this is an acceptable degraded terminal state. (Note: this is the *plan-phase* failure case — diff-phase failures land in `pre-pr-review-failed` instead.)
+- The **prior-run gate at Step 1.5** detects that this ticket already has an open Draft / open / merged PR managed by thk → write `context/outcome.md` (status `already-shipped`), point at the existing GH issue + PR URLs, stop. (Re-runs on closed-unmerged or PR-less prior runs **rehydrate** the prior context locally and continue from where the previous run left off — they don't terminate at this status.)
 - The captured context shows the issue is **already fixed** → write `context/outcome.md` (status `already-fixed`), stop.
 - The captured context is **missing critical information** → write `context/outcome.md` (status `needs-more-info`) listing what's needed, stop.
 - **A capture preflight needs a missing secret** (today: Jam token for video jams) → write `context/outcome.md` (status `needs-jam-token`) with explicit drop-in instructions, stop. Re-invoking after the user provides the secret resumes the run from the preflight.
@@ -108,9 +107,9 @@ No mid-run interaction. The King reads `progress.md` and (if present) `outcome.m
 You handle every entry condition the King throws at you. Before doing any work, figure out where this ticket currently is:
 
 1. Derive the ticket slug from the URL (lowercased, hyphenated — `eng-10105`).
-2. `ls <targetRepo>/.thk/sessions/` and find directories ending in `_<slug>`, most recent first.
+2. `ls <targetRepo>/.claude/.thk/sessions/` and find directories ending in `_<slug>`, most recent first.
 3. For each match, read `progress.md` and inspect `status`:
-   - **Terminal — skip and look for an older session, or mint a new one if none remain:** `pr-drafted`, `execution-failed`, `pre-pr-review-failed`, `plan-published-review-failed`, `already-fixed`, `needs-more-info`, `failed`.
+   - **Terminal — skip and look for an older session, or mint a new one if none remain:** `pr-drafted`, `already-shipped`, `execution-failed`, `pre-pr-review-failed`, `plan-published-review-failed`, `already-fixed`, `needs-more-info`, `failed`.
    - **Fixable — resume in place if the user has addressed the blocker:** `needs-jam-token`. Re-check the preflight at Step 1c.5; if it now passes, continue from Step 1d. If still missing, refuse to mint a new session — point the user back at the existing `outcome.md`.
    - **Resumable — pick up at the first incomplete step:** `in-progress`, `plan-published`, `plan-finalized`, `plan-reviewed`. The flow continues through to Step 7 (Draft PR) regardless of whether the meeting was convened.
 4. If no resumable session exists, mint a new `session-id` and start fresh from Step 0.
@@ -121,19 +120,17 @@ Resumption guards against silent drift: re-read `runtime-profile.json` rather th
 
 ### Resume from a different machine — the no-local-session case
 
-If the session folder doesn't exist locally but the ticket has a thk-managed GitHub issue (a teammate started the run on another machine, or the local session was wiped), the issue's hidden markers carry enough state to rehydrate without re-resolving:
+If the session folder doesn't exist locally but the ticket has a thk-managed GitHub issue (a teammate started the run on another machine, or the local session was wiped), the **prior-run gate at Step 1b.5** handles rehydration automatically — see that step's "Rehydration" subsection for the full procedure.
 
-```bash
-gh issue view <issueNumber> --json body --jq .body | grep -E '<!-- thk-(assets-ref|runner-profile|meeting):'
-```
+Summary of what 1b.5 does in this case:
 
-Parse the three markers:
+1. Detects the existing GH issue via the Linear ticket's `Hand of the King — <TICKET-CODE>` link.
+2. Parses the issue's hidden markers (`thk-assets-ref`, `thk-runner-profile`, `thk-meeting`).
+3. Checks PR state via `gh pr list --search "head:<branchName>"` to decide already-shipped vs rehydrate.
+4. On rehydrate decisions, fetches the assets ref and copies the bundled `context/` + `session-progress.md` + `session-runtime-profile.json` + `session-log.md` into the freshly-scaffolded local session.
+5. The Hand then resumes from the rehydrated `progress.md`'s first incomplete step exactly as if the session had been running locally all along.
 
-- `thk-assets-ref` → fetch the bundle: `git fetch origin '<ref>:<ref>'` then read `.github/thk-assets/<session-id>/context/` to rebuild a local `<contextDir>/`.
-- `thk-runner-profile` → use this profile instead of re-resolving via `scripts/resolve-profile.mjs`. The locally-detected runners may differ; the on-issue value wins so the run stays consistent across machines.
-- `thk-meeting` → if `yes`, the meeting was convened — Step 6 runs the diff-phase via `_convene-meeting`. If `no`, Step 6 runs the no-meeting Counselor pass. If absent, the Step 3 decision hasn't been made yet — proceed to Step 3 normally.
-
-Rebuild a local session folder from the unbundled `context/`, write the parsed profile to `runtime-profile.json`, infer the current `progress.md` step from which artifacts the bundle contains (e.g., `plan-reviews/round-1-plan/` present + `round-1-diff/` absent → Step 5 or Step 6), and resume from there.
+This means the Hand needs no special "different-machine" code path — Step 1b.5 normalizes the entry condition, and from Step 1c onward there's just one flow regardless of whether the session was born on this machine or rehydrated from an issue.
 
 ## Workspace and profile resolution (step 0)
 
@@ -141,12 +138,11 @@ thk runs from wherever Claude Code was launched and operates on a target git rep
 
 1. **`targetRepo`** — the product repo to worktree from. Resolve in this order, first hit wins:
     - `$THK_TARGET_REPO` environment variable (absolute path)
-    - `$HOME/.claude/thk/workspace.json` with `{ "target_repo": "/absolute/path/to/target-repo" }`
     - Fallback: `$PWD` (Claude's cwd when `/thk` was invoked)
 
-    Note the resolved source in `progress.md` under Notes so the King knows which path the run used.
+    Note the resolved source in `progress.md` under Notes so the King knows which path the run used. (thk is per-project; there's no home-dir workspace pointer. Either launch Claude Code from inside the target repo, or set `THK_TARGET_REPO` in your shell.)
 
-2. **`sessionsBase`** — always `<targetRepo>/.thk/sessions/`. Sessions live inside the target repo. `install.sh` adds `.thk/` to `.gitignore` (with the user's consent) so sessions stay out of `git status`; for marketplace-only installs that bypass the script, `scaffold-session` auto-adds the entry on first run.
+2. **`sessionsBase`** — always `<targetRepo>/.claude/.thk/sessions/`. Sessions live inside the target repo. `install.sh` adds `.claude/.thk/` to `.gitignore` (with the user's consent) so sessions stay out of `git status`; for marketplace-only installs that bypass the script, `scaffold-session` auto-adds the entry on first run.
 
 Sanity-check: `test -d "<targetRepo>/.git"` — if it's not a git repo, write `outcome.md` with status `failed` and reason `targetRepo is not a git repo` and stop.
 
@@ -190,6 +186,98 @@ Agent(master-of-whisperers, prompt="action: capture-linear. ticketUrl: <url>. co
   → returns { ticketCode, assigner, gitBranchName, prPreviewPrNumber?, tickets, commentCount }
 ```
 
+### 1b.5 — Prior-run gate (detect already-shipped tickets + rehydrate when needed)
+
+Before doing any more work, check whether thk has run on this ticket before. The signal lives in the Linear ticket's **Links** panel — that's where Step 4 attaches the GitHub issue URL on every successful run.
+
+#### Detection
+
+1. **Read the captured Linear file** (`<contextDir>/linear/<TICKET-CODE>.md`) and look for a Links-panel entry with title `Hand of the King — <TICKET-CODE>`. If absent → no prior run, skip the rest of this step and proceed to Step 1c.
+2. **Fetch the linked GitHub issue's body and state**:
+   ```bash
+   gh issue view <issueNumber> --json body,state,number --jq '{ body, state, number }'
+   ```
+3. **Parse the three hidden markers** from the body:
+   - `<!-- thk-assets-ref: refs/thk/<TICKET-CODE> -->` (required from publish onward)
+   - `<!-- thk-runner-profile: <profile> -->` (required from publish onward)
+   - `<!-- thk-meeting: yes | no -->` (set after Step 3; absent if prior run never reached Step 3)
+
+   If a required marker is missing, the issue is malformed (or not thk-managed) — log a warning, treat as "no prior run", proceed to Step 1c.
+
+4. **Check for an associated PR by branch name**. The branch is `<gitBranchName>` from capture-linear's return:
+   ```bash
+   gh pr list --search "head:<gitBranchName>" --state all --json state,isDraft,url,number,mergedAt
+   ```
+
+#### Decision
+
+| PR state | What to do |
+|----------|------------|
+| **Open Draft** | The previous run is at `pr-drafted` and the human reviewer hasn't touched it. Write `<contextDir>/outcome.md` with status `already-shipped`, list the GH issue URL + PR URL + a one-line "if you want a fresh attempt, close this PR and re-run". Set `progress.md` status `already-shipped`. **Stop.** |
+| **Open non-Draft** | A human has already moved the PR out of Draft — they're mid-review or about to merge. thk shouldn't interfere. Same `already-shipped` outcome. **Stop.** |
+| **Merged** | The previous run shipped successfully. Default to `already-shipped` and **stop** — minting a new run would be unusual. (If you genuinely want a v2 attempt on `main` after this merged, set env var `THK_FORCE_NEW_ATTEMPT=1` to bypass — note in `outcome.md` that the user opted in.) |
+| **Closed unmerged** | Previous attempt was abandoned. **Rehydrate** the prior context locally (see below) and mint a v2 attempt — use branch name `<gitBranchName>-v2` (or `-v3`, `-v4`, … iterating to the next free suffix found via `git ls-remote origin "refs/heads/<gitBranchName>-v*"`). Note in `progress.md` Notes that this is a v2+. |
+| **No PR found** | The previous run published the GH issue but didn't reach Step 7 (PR open). **Rehydrate** the prior context locally; resume from the first incomplete step per the rehydrated `progress.md`. |
+
+#### Rehydration
+
+When the decision is "rehydrate" (closed-unmerged PR or no PR), download the bundled context from the assets ref into the just-scaffolded local session folder. The bundle is the source of truth — the local machine may have never seen this ticket before.
+
+```bash
+# 1. Fetch the assets ref from origin into the local refs namespace
+cd <targetRepo>
+git fetch origin "<assetsRef>:<assetsRef>"
+
+# 2. Add a temporary worktree of the assets ref so we can read its tree
+TMP_REHYDRATE="$(mktemp -d -t thk-rehydrate-XXXXXX)"
+git worktree add --detach "$TMP_REHYDRATE" "<assetsRef>"
+
+# 3. Identify the bundle's session-id (latest one — there may be multiple
+#    if v2/v3 attempts exist). The newest is the deepest folder under
+#    .github/thk-assets/.
+LATEST_BUNDLE_SESSION_ID="$(ls -1 "$TMP_REHYDRATE/.github/thk-assets/" | sort | tail -1)"
+BUNDLE_ROOT="$TMP_REHYDRATE/.github/thk-assets/$LATEST_BUNDLE_SESSION_ID"
+
+# 4. Copy the bundled context/ into the new local session's contextDir
+mkdir -p "<contextDir>"
+cp -R "$BUNDLE_ROOT/context/." "<contextDir>/"
+
+# 5. Copy the bundled session metadata (progress.md + runtime-profile.json)
+#    into the new session root — Step 7 below pushes a fresh bundle on
+#    next update-github-issue, so divergence is fine.
+[ -f "$BUNDLE_ROOT/session-progress.md" ]         && cp "$BUNDLE_ROOT/session-progress.md"         "<sessionPath>/progress.md"
+[ -f "$BUNDLE_ROOT/session-runtime-profile.json" ] && cp "$BUNDLE_ROOT/session-runtime-profile.json" "<sessionPath>/runtime-profile.json"
+[ -f "$BUNDLE_ROOT/session-log.md" ]              && cp "$BUNDLE_ROOT/session-log.md"              "<sessionPath>/log.md"
+
+# 6. Tear down the temp worktree
+git worktree remove --force "$TMP_REHYDRATE"
+```
+
+If the bundled `session-progress.md` and `session-runtime-profile.json` are missing (older bundles from before they were tracked), reconstruct from the markers + file presence:
+
+- `progress.md` → write a synthetic one inferring from what's present:
+  - `context/linear/<TICKET-CODE>.md` exists → Step 1 = done
+  - `context/plan.md` exists → Step 2a = done
+  - The bundle existing → Step 2b = done
+  - `context/plan-reviews/round-{1,2}-plan/` populated → Step 3 done with meeting
+  - `context/plan-reviews/round-{1,2}-diff/` populated OR `counselor-pre-pr.md` exists → Step 6 done
+  - PR state from the gate → Step 7 done if PR exists
+- `runtime-profile.json` → re-resolve via `node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-profile.mjs" --profile <thk-runner-profile-from-marker> --target-repo "<targetRepo>"`
+
+Log the rehydration:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <sessionPath> hand decision "rehydrated from refs/thk/<TICKET-CODE> (prior session: <LATEST_BUNDLE_SESSION_ID>) — resuming from <step>"
+```
+
+After rehydration, fall through to the normal resumability path: read the rehydrated `progress.md`, jump to the first incomplete step. **Do not re-run** Step 1b (capture-linear) or Step 1c (URL harvest) on rehydrated runs unless the rehydrated `progress.md` shows them as not done — the bundled `context/` is the truth.
+
+#### When to issue a new GH issue vs reuse the existing one
+
+If we rehydrated and the prior issue is still tracking active work (closed-unmerged PR scenario, or no PR yet), **reuse the existing GH issue**. Use `_update-github-issue` with the same `issueUrl` for any subsequent pushes. Don't create a duplicate.
+
+If the user opted into a fresh v2 attempt (via `THK_FORCE_NEW_ATTEMPT=1` after a merged PR), **create a new GH issue** but include a "v2 of #<original-issue-number>" line in the body so reviewers see the lineage. The branch suffix (`-v2`) keeps git side clean.
+
 ### 1c. Harvest URLs
 
 Read the Linear files the Whisperer just wrote under `<contextDir>/linear/`. Extract:
@@ -220,10 +308,10 @@ If **none** of the harvested Jam URLs are video jams → no token required, cont
 If **any** are video jams, check token availability in this order — first hit wins:
 
 1. `$JAM_TOKEN` environment variable.
-2. `<targetRepo>/.thk/keys/jam.key` — file exists and is non-empty.
+2. `<targetRepo>/.claude/.thk/keys/jam.key` — file exists and is non-empty.
 3. `~/.jamtoken` — file exists and is non-empty.
 
-Use a short bash check (`[ -n "${JAM_TOKEN:-}" ] || [ -s <repo>/.thk/keys/jam.key ] || [ -s ~/.jamtoken ]`) to determine presence — don't read the token's value, just whether it's there.
+Use a short bash check (`[ -n "${JAM_TOKEN:-}" ] || [ -s <repo>/.claude/.thk/keys/jam.key ] || [ -s ~/.jamtoken ]`) to determine presence — don't read the token's value, just whether it's there.
 
 **If a video jam exists AND no token is present** → write `<contextDir>/outcome.md` with status `needs-jam-token`:
 
@@ -248,7 +336,7 @@ in **one** of these places (first hit wins):
 | Where | When to use |
 |-------|-------------|
 | `export JAM_TOKEN=<token>` (then re-launch Claude Code) | Per-session, ad-hoc |
-| `<targetRepo>/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here |
+| `<targetRepo>/.claude/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here |
 | `~/.jamtoken` (chmod 600) | User-global, all repos |
 
 Then re-invoke `/thk <same-ticket-url>` — this session resumes from Step 1c.5 and proceeds normally.
@@ -588,19 +676,26 @@ The Counselor is *not* dispatched ad-hoc — by design, it runs only as the clos
 **Ticket URL:** <url>
 **Started:** <ISO 8601>
 **Last updated:** <ISO 8601>
-**Status:** in-progress | plan-published | plan-finalized | plan-reviewed | plan-published-review-failed | execution-failed | pre-pr-review-failed | pr-drafted | already-fixed | needs-more-info | needs-jam-token | failed
+**Status:** in-progress | plan-published | plan-finalized | plan-reviewed | plan-published-review-failed | execution-failed | pre-pr-review-failed | pr-drafted | already-shipped | already-fixed | needs-more-info | needs-jam-token | failed
 **Runtime profile:** <selected_profile>
 
 ## Steps
 
 ### 1 — Capture
-- State: pending | in-progress | done | needs-jam-token | failed
+- State: pending | in-progress | done | needs-jam-token | already-shipped | failed
 - Completed: <ISO>
 - Assigner: <name>
 - Summary: <counts>
+- Prior-run gate (Step 1b.5):
+  - Linear link found: yes | no
+  - (if yes) GH issue: <url>
+  - (if yes) Markers parsed: thk-runner-profile=<...>, thk-meeting=<yes|no|absent>
+  - (if yes) PR state: draft | open | merged | closed | none
+  - Decision: fresh-start | rehydrated | rehydrated-as-v2 | already-shipped
+  - (if rehydrated) Bundle source-id: <prior session-id from .github/thk-assets/>
 - Preflight (Step 1c.5):
   - Video jams found: <count>
-  - Jam token source: env JAM_TOKEN | <repo>/.thk/keys/jam.key | ~/.jamtoken | none
+  - Jam token source: env JAM_TOKEN | <repo>/.claude/.thk/keys/jam.key | ~/.jamtoken | none
   - Outcome: passed | halted (needs-jam-token) | bypassed (THK_SKIP_JAM_FRAMES=1)
 
 ### 2a — Plan draft
@@ -722,9 +817,10 @@ Later iterations may add:
 - Every piece of evidence must be on disk under `<contextDir>/`, and every file under `<contextDir>/` (except `outcome.md`) must end up committed to the repo by `publish-plan-to-github`. The published issue must stand on its own: a downstream execution agent with no MCPs, or a human developer on a different machine, must be able to ship from the issue + the repo alone. The handoff bar is absolute even when the Council is skipped.
 - If the captured context is enough to write a plan, write it. Only emit `needs-more-info` if drafting would be guessing.
 - **Halt on missing secrets, don't silently degrade.** If a capture needs a credential the user hasn't provided (today: Jam token for video jams), halt the run at the preflight (Step 1c.5) with a `needs-<thing>` outcome status and exact drop-in instructions. Producing a half-complete `context/` and proceeding would land in a half-complete GitHub issue without anyone noticing — worse than stopping. The escape hatch (`THK_SKIP_<...>`) exists only when the user explicitly opts in.
+- **Never duplicate a thk-managed PR.** Step 1b.5 detects existing thk runs by reading the Linear ticket's Links panel. If a Draft / open / merged PR already exists for this ticket, terminate at `already-shipped` — do not create a second GH issue or push a second branch. If the prior run never reached PR (no PR found, or PR was closed unmerged), rehydrate the prior context locally from the assets ref and resume — don't start over. The only path that creates a second GH issue is an explicit `THK_FORCE_NEW_ATTEMPT=1` opt-in after a merged PR.
 - **You decide whether to convene a meeting at Step 3.** It's all-or-nothing — once you convene, both phases run (plan side at Step 3, diff side at Step 6). Be conservative — review is cheap, missed concerns are not. Default to convene when in doubt; skip only when every signal in Step 3's checklist points at "trivial".
 - **The no-meeting path still gets a Counselor pass at Step 6.** "No meeting" doesn't mean "no review" — it just means a single Counselor sanity check on the diff instead of full Council rounds. Skipping that check would let regressions slip through.
 - **Council members are dispatchable ad-hoc at any step**, regardless of whether you convened a meeting. See the "Ad-hoc council consults" section. The Counselor is the exception — it runs only as the closer of a deliberation.
 - **Execution is single-agent.** You write the code yourself via `_execute-plan`. Don't fan out to sub-agents writing files in parallel — the merge-conflict surface and re-derivation cost outweigh the wall-clock savings for any typical ticket. The exception is genuinely embarrassingly parallel work (mechanical rename across disjoint files), and even then, the Hand decides per-run.
 - **The Draft PR is the implementation handoff.** When the run reaches `pr-drafted`, the human reviewer takes over. Don't mark the PR ready-for-review yourself; it stays in Draft until a human moves it.
-- The King has the final word. If `outcome.md` says `already-fixed`, `needs-more-info`, `execution-failed`, `pre-pr-review-failed`, or `plan-published-review-failed`, it is a proposal to him — not a unilateral decision.
+- The King has the final word. If `outcome.md` says `already-fixed`, `needs-more-info`, `already-shipped`, `execution-failed`, `pre-pr-review-failed`, or `plan-published-review-failed`, it is a proposal to him — not a unilateral decision.

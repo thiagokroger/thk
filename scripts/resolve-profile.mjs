@@ -152,11 +152,14 @@ function detectMachine() {
 }
 
 function defaultConfigPaths(args) {
+  // thk is per-project. The only config sources are:
+  //   1. $THK_CONFIG — explicit override (per-shell / CI)
+  //   2. <targetRepo>/.claude/.thk/config.json — committed alongside the project
+  // No home-dir state. A teammate's machine resolves the same config from the
+  // same files because they live in the repo.
   const paths = [];
   if (process.env.THK_CONFIG) paths.push(process.env.THK_CONFIG);
-  paths.push("~/.thk/config.json");
-  paths.push("~/.claude/thk/config.json");
-  if (args.targetRepo) paths.push(path.join(args.targetRepo, ".thk", "config.json"));
+  if (args.targetRepo) paths.push(path.join(args.targetRepo, ".claude", ".thk", "config.json"));
   return paths.map(absoluteMaybe);
 }
 
@@ -243,7 +246,17 @@ function selectedProfileName(args, config, detection) {
 }
 
 function writeInitConfig(args, config, detection) {
-  const outputPath = absoluteMaybe(args.configPaths[0] || "~/.thk/config.json");
+  // Default to the repo-local path. --config <path> overrides; --target-repo is
+  // required for the implicit default. thk is per-project — there's no
+  // home-dir fallback by design.
+  const repoLocalDefault = args.targetRepo
+    ? path.join(args.targetRepo, ".claude", ".thk", "config.json")
+    : null;
+  const explicitPath = args.configPaths[0];
+  if (!explicitPath && !repoLocalDefault) {
+    throw new Error("--init requires either --config <path> or --target-repo <path> (thk config is per-project; no home-dir default).");
+  }
+  const outputPath = absoluteMaybe(explicitPath || repoLocalDefault);
   const defaultProfile = selectedProfileName(args, config, detection) || inferRecommendedProfile(detection, config.profiles);
   const existed = fs.existsSync(outputPath);
   const body = {
@@ -277,12 +290,10 @@ Usage:
   node scripts/resolve-profile.mjs --list
   node scripts/resolve-profile.mjs --detect
 
-Config resolution:
-  1. config/profiles.json in the plugin
-  2. $THK_CONFIG, if set
-  3. ~/.thk/config.json
-  4. ~/.claude/thk/config.json
-  5. <targetRepo>/.thk/config.json, when --target-repo is provided
+Config resolution (per-project — no home-dir state):
+  1. config/profiles.json in the plugin (built-in defaults)
+  2. $THK_CONFIG, if set (explicit override)
+  3. <targetRepo>/.claude/.thk/config.json, when --target-repo is provided
 
 Profile selection:
   --profile wins, then $THK_PROFILE, then default_profile.

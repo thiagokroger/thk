@@ -9,7 +9,7 @@ description: Create the session folder layout at an absolute path — `<sessionP
 ```
 {
   sessionId:   "<YYYY-MM-DD_HHMMSS_slug>",
-  sessionPath: "<abs — e.g. <targetRepo>/.thk/sessions/<sessionId>>",
+  sessionPath: "<abs — e.g. <targetRepo>/.claude/.thk/sessions/<sessionId>>",
   targetRepo:  "<abs — the product repo to worktree from>",
   baseBranch:  "<base branch in targetRepo>",
   branchName:  "<new branch to create>",
@@ -18,29 +18,29 @@ description: Create the session folder layout at an absolute path — `<sessionP
 }
 ```
 
-All four paths are absolute. The session lives under `<targetRepo>/.thk/sessions/<sessionId>` — **inside** the target repo. Most of `.thk/` must be excluded by git so session folders, secrets, and per-developer config don't show up in `git status`. **One file is the exception: `<targetRepo>/.thk/policies.json` — that's team-shared (banned tables, verification commands) and SHOULD be committed.**
+All four paths are absolute. The session lives under `<targetRepo>/.claude/.thk/sessions/<sessionId>` — **inside** the target repo. Most of `.claude/.thk/` must be excluded by git so session folders, secrets, and per-developer config don't show up in `git status`. **One file is the exception: `<targetRepo>/.claude/.thk/policies.json` — that's team-shared (banned tables, verification commands) and SHOULD be committed.**
 
 `install.sh` writes the right lines on guided setup. For users who installed via the Claude Code marketplace and never ran the script, this skill is the backstop — it auto-adds the exclude block on first run.
 
 ## Procedure
 
 ```bash
-# Ensure .thk/ is gitignored EXCEPT policies.json (team-shared rules).
+# Ensure .claude/.thk/ is gitignored EXCEPT policies.json (team-shared rules).
 # The marketplace install path skips install.sh entirely, so this skill is
 # the second line of defense.
 #
-# Strategy: a 2-line block that excludes everything under .thk/ but
-# preserves .thk/policies.json. The block is idempotent — we check for
+# Strategy: a 2-line block that excludes everything under .claude/.thk/ but
+# preserves .claude/.thk/policies.json. The block is idempotent — we check for
 # the marker comment before appending.
-GITIGNORE_MARKER='# thk session state — .thk/ is per-developer except policies.json (team-shared)'
+GITIGNORE_MARKER='# thk session state — .claude/.thk/ is per-developer except policies.json (team-shared)'
 if grep -qxF "$GITIGNORE_MARKER" <targetRepo>/.gitignore 2>/dev/null; then
   : # already added by us (or install.sh) — no-op
-elif grep -qxF '.thk/' <targetRepo>/.git/info/exclude 2>/dev/null \
-     && ! grep -qxF '.thk/' <targetRepo>/.gitignore 2>/dev/null; then
+elif grep -qxF '.claude/.thk/' <targetRepo>/.git/info/exclude 2>/dev/null \
+     && ! grep -qxF '.claude/.thk/' <targetRepo>/.gitignore 2>/dev/null; then
   : # User opted into the repo-local exclude list explicitly. Respect that
     # signal — but note: policies.json won't be committable that way unless
     # the user adds an exception themselves. Log a one-line tip to stderr.
-  echo "scaffold-session: '.thk/' is in .git/info/exclude (per-developer ignore). To share thk policies with the team, move the exclude to .gitignore — this skill will rewrite it on next run if you remove the .git/info/exclude line." >&2
+  echo "scaffold-session: '.claude/.thk/' is in .git/info/exclude (per-developer ignore). To share thk policies with the team, move the exclude to .gitignore — this skill will rewrite it on next run if you remove the .git/info/exclude line." >&2
 else
   # If .gitignore exists and lacks a trailing newline, add one before the block
   if [ -f <targetRepo>/.gitignore ] && [ -s <targetRepo>/.gitignore ] \
@@ -48,11 +48,11 @@ else
     printf "\n" >> <targetRepo>/.gitignore
   fi
   cat >> <targetRepo>/.gitignore <<'IGNORE'
-# thk session state — .thk/ is per-developer except policies.json (team-shared)
-.thk/
-!.thk/policies.json
+# thk session state — .claude/.thk/ is per-developer except policies.json (team-shared)
+.claude/.thk/
+!.claude/.thk/policies.json
 IGNORE
-  echo "scaffold-session: added '.thk/' (with '!.thk/policies.json' exception) to <targetRepo>/.gitignore." >&2
+  echo "scaffold-session: added '.claude/.thk/' (with '!.claude/.thk/policies.json' exception) to <targetRepo>/.gitignore." >&2
 fi
 
 mkdir -p \
@@ -79,11 +79,11 @@ Detection:
 - `package-lock.json` present → `npm ci`
 - `bun.lockb` present → `bun install --frozen-lockfile`
 - only `package.json`, no lockfile → `npm install`
-- no `package.json` at all → skip the install step (the project doesn't have JS-shaped deps; declare a custom command in `<workdir>/.thk/policies.json` under `verification.install` if a different install step is needed)
+- no `package.json` at all → skip the install step (the project doesn't have JS-shaped deps; declare a custom command in `<workdir>/.claude/.thk/policies.json` under `verification.install` if a different install step is needed)
 
-If `<targetRepo>/.thk/policies.json` declares `verification.install`, that wins over the inference here too — same source-of-truth as the verification gauntlet.
+If `<targetRepo>/.claude/.thk/policies.json` declares `verification.install`, that wins over the inference here too — same source-of-truth as the verification gauntlet.
 
-Note: `git worktree add` accepts an absolute path, so the worktree lives under `<sessionPath>/` (inside `<targetRepo>/.thk/sessions/<sessionId>/worktree/`) while still being a valid checkout of `<targetRepo>`. Commits made there push to `<targetRepo>`'s origin. The `.gitignore` entry on `.thk/` keeps it from showing as untracked in the main checkout's `git status`.
+Note: `git worktree add` accepts an absolute path, so the worktree lives under `<sessionPath>/` (inside `<targetRepo>/.claude/.thk/sessions/<sessionId>/worktree/`) while still being a valid checkout of `<targetRepo>`. Commits made there push to `<targetRepo>`'s origin. The `.gitignore` entry on `.claude/.thk/` keeps it from showing as untracked in the main checkout's `git status`.
 
 ### Assets worktree on a custom ref
 
@@ -145,12 +145,16 @@ This folder is the shared intelligence for a single thk session. A downstream ag
   - `network.md` — every network request, chronological.
   - `user-events.md` — user interaction timeline.
   - `screenshots/` — PNG screenshots (keyframes on video jams, captured frames on screenshot jams).
-- `figma/<node-id>/` — one folder per Figma design:
-  - `context.md` — code snippets, annotations, Code Connect mappings.
-  - `metadata.json` — file structure metadata.
-  - `variables.json` — design tokens.
-  - `screenshots/` — PNG screenshots.
-  - `html/` — HTML exports (if provided).
+- `figma/<node-id>/` — one folder per Figma node, written by `_capture-figma`. Always contains a `README.md` index with a "read when" hint per file so a downstream agent can navigate selectively without reading the whole folder. Other files appear when the Figma MCP returns content for them:
+  - `README.md` — **always written.** Index of every file in the folder, plus the source URL, node name/type/dimensions, and which MCP tools succeeded / returned empty / failed.
+  - `context.md` — prose design context: annotations, layout notes, code-shape hints (typically React+Tailwind shaped via Code Connect).
+  - `code/<n>.<ext>` — raw code blocks extracted from `context.md` (TSX / JSX / HTML / CSS / etc., one file per fenced block) — agent can `cat` these without re-parsing markdown.
+  - `metadata.md` — structured node tree: dimensions, fills, strokes, children, layout constraints (markdown wrapping a JSON code block).
+  - `variables.md` — design tokens (colors, typography, spacing) — omitted if the file declares none.
+  - `libraries.md` — component libraries this file imports — omitted if none.
+  - `code-connect.md` — Code Connect map (Figma component → codebase component path) — omitted if none.
+  - `screenshots/<n>.png` — PNG renders, downloaded locally (never URL-referenced in markdown).
+  - `html/<name>.html` — hand-pasted HTML/CSS the King provided in-conversation, when relevant — usually higher-fidelity than `context.md`'s code.
 - `planetscale/<queryName>.md` — read-only SELECT query results, produced by the Grand Maester on his own judgment during Step 3a when a ticket or plan hinges on a specific record's state. Absent for tickets with no data-dependent question.
 
 ## Council deliberation — `plan-reviews/`

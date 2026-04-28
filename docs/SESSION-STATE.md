@@ -1,12 +1,12 @@
 # thk — session state inside the target repo
 
-A concrete on-disk example of `<targetRepo>/.thk/` after three runs: one complex ticket that ran the full meeting flow to a Draft PR, one simple ticket that skipped the meeting, and one currently in progress.
+A concrete on-disk example of `<targetRepo>/.claude/.thk/` after three runs: one complex ticket that ran the full meeting flow to a Draft PR, one simple ticket that skipped the meeting, and one currently in progress.
 
 ```
 <target-repo>/
 ├── .git/
-├── .gitignore                              # contains `.thk/` (added by install.sh)
-├── .thk/                                   # gitignored — never shows in `git status`
+├── .gitignore                              # contains `.claude/.thk/` (added by install.sh)
+├── .claude/.thk/                                   # gitignored — never shows in `git status`
 │   ├── config.json                         # written by install.sh — runner profile,
 │   │                                       # ticket source, optional capture MCPs
 │   ├── keys/                               # per-source secrets, chmod 700
@@ -105,7 +105,7 @@ A concrete on-disk example of `<targetRepo>/.thk/` after three runs: one complex
 └── (rest of the target repo: src/, package.json, etc. — untouched by thk)
 ```
 
-## What's NOT in `.thk/` but lives elsewhere
+## What's NOT in `.claude/.thk/` but lives elsewhere
 
 | Artifact | Where |
 |----------|-------|
@@ -126,6 +126,6 @@ A concrete on-disk example of `<targetRepo>/.thk/` after three runs: one complex
 - Sessions **persist by default**. The Hand doesn't auto-clean after `pr-drafted` — the session is your local audit trail.
 - `_cleanup-session` is available but only runs when explicitly dispatched (rare today). It removes both worktrees and the session folder by default.
 - The `refs/thk/<TICKET-CODE>` on origin **never** gets cleaned up by design — months later, anyone can `git fetch origin 'refs/thk/*:refs/thk/*'` and inspect any session's full bundled context at the exact commit SHA the GitHub issue references.
-- Disk-size note: Jam/Figma screenshots are PNGs, so individual sessions can run 1–10 MB each. After dozens of sessions you might want to occasionally `rm -rf .thk/sessions/<old-ones>/` — it's safe (the GitHub side stays intact via the persistent custom ref).
+- Disk-size note: Jam/Figma screenshots are PNGs, so individual sessions can run 1–10 MB each. After dozens of sessions you might want to occasionally `rm -rf .claude/.thk/sessions/<old-ones>/` — it's safe (the GitHub side stays intact via the persistent custom ref).
 
-**Worth keeping clean:** `.thk/keys/` — that's the only thing in `.thk/` that contains real secrets. `chmod 700` on the dir + `chmod 600` on each key file keeps them owner-readable only. Both `.thk/` and `.thk/keys/` are gitignored independently, so even if someone removes `.thk/` from `.gitignore` later, `.thk/keys/` and `*.key` are still excluded.
+**Worth keeping clean:** `.claude/.thk/keys/` — that's the only thing in `.claude/.thk/` that contains real secrets. `chmod 700` on the dir + `chmod 600` on each key file keeps them owner-readable only. Both `.claude/.thk/` and `.claude/.thk/keys/` are gitignored independently, so even if someone removes `.claude/.thk/` from `.gitignore` later, `.claude/.thk/keys/` and `*.key` are still excluded.

@@ -6,9 +6,9 @@
 #
 # Arguments:
 #   $1  — any path that resolves to the session root. Accepts:
-#           <targetRepo>/.thk/sessions/<id>/          (itself)
-#           <targetRepo>/.thk/sessions/<id>/context/  (sibling)
-#           <targetRepo>/.thk/sessions/<id>/worktree/ (sibling)
+#           <targetRepo>/.claude/.thk/sessions/<id>/          (itself)
+#           <targetRepo>/.claude/.thk/sessions/<id>/context/  (sibling)
+#           <targetRepo>/.claude/.thk/sessions/<id>/worktree/ (sibling)
 #   $2  — actor slug: "hand", "grand-maester", "master-of-laws",
 #         "lord-commander", "master-of-coin", "master-of-whisperers",
 #         "master-of-ships", "counselor-altman", or a skill/capture name.

@@ -58,7 +58,7 @@ On any failure, return `{ error: "<reason>" }`.
 
 ### 2. Derive session-id
 
-Extract from `<contextDir>`. The path is typically `<targetRepo>/.thk/sessions/<session-id>/context/`; take the second-to-last path segment as `session-id`. If the path doesn't match that shape, fall back to a timestamp-ticket slug.
+Extract from `<contextDir>`. The path is typically `<targetRepo>/.claude/.thk/sessions/<session-id>/context/`; take the second-to-last path segment as `session-id`. If the path doesn't match that shape, fall back to a timestamp-ticket slug.
 
 ### 3. Bundle the ENTIRE context folder into the assets worktree
 
@@ -78,25 +78,31 @@ Copy every file under `<contextDir>/` — **excluding only `outcome.md`** (sessi
 │   ├── events.json
 │   └── screenshots/*.png
 ├── figma/<node-id>/
-│   ├── context.md
-│   ├── metadata.json
-│   ├── variables.json
+│   ├── README.md                       # index — always written by _capture-figma
+│   ├── context.md                      # design-context prose
+│   ├── code/*.{tsx,html,css,…}         # raw code blocks extracted from context.md
+│   ├── metadata.md
+│   ├── variables.md                    # omitted when the file declares none
+│   ├── libraries.md                    # omitted when the file imports none
+│   ├── code-connect.md                 # omitted when no Code Connect mappings exist
 │   ├── screenshots/*.png
-│   └── html/*.html
+│   └── html/*.html                     # hand-pasted by the King, omitted when none
 ├── planetscale/<queryName>.md          # redacted SELECT results
 ├── plan.md                             # (also inlined at top of issue body)
 ├── root-cause-analysis.md              # if present
 └── review-brief.md                     # if present
 ```
 
-**Session log bundling.** The session keeps an append-only log at `<session-root>/log.md` (sibling of `<contextDir>/` — `session_root="$(dirname "$contextDir")"`). Copy it into the bundle as a peer of the `context/` folder so the GitHub issue carries it too:
+**Session metadata bundling.** Beyond the `context/` folder, three sibling files at the session root carry state that future runs need for resumption — `log.md`, `progress.md`, and `runtime-profile.json`. Copy each into the bundle as a peer of the `context/` folder so the GitHub issue carries them too:
 
 ```bash
 session_root="$(dirname "$contextDir")"
-[ -f "$session_root/log.md" ] && cp "$session_root/log.md" .github/thk-assets/<session-id>/session-log.md
+[ -f "$session_root/log.md" ]              && cp "$session_root/log.md"              .github/thk-assets/<session-id>/session-log.md
+[ -f "$session_root/progress.md" ]         && cp "$session_root/progress.md"         .github/thk-assets/<session-id>/session-progress.md
+[ -f "$session_root/runtime-profile.json" ] && cp "$session_root/runtime-profile.json" .github/thk-assets/<session-id>/session-runtime-profile.json
 ```
 
-Skip silently if the log is missing (unusual — it's created on first logger call — but not fatal).
+Skip silently if any of them is missing (unusual — they're created early in the run — but not fatal). The `session-progress.md` + `session-runtime-profile.json` peers are what enables Step 1.5's rehydration path in `thk/SKILL.md` to reconstruct prior runs from the issue alone, with no inference required.
 
 **Staging discipline** — never `git add .` / `-A`. Stage the `.github/thk-assets/<session-id>/` subtree by exact path only. The assets worktree has no other content, so the tree naturally stays scoped — but explicit staging is still the rule:
 
@@ -106,7 +112,9 @@ mkdir -p .github/thk-assets/<session-id>/
 cp -R <contextDir>/. .github/thk-assets/<session-id>/context/
 rm -f .github/thk-assets/<session-id>/context/outcome.md
 session_root="$(dirname "$contextDir")"
-[ -f "$session_root/log.md" ] && cp "$session_root/log.md" .github/thk-assets/<session-id>/session-log.md
+[ -f "$session_root/log.md" ]              && cp "$session_root/log.md"              .github/thk-assets/<session-id>/session-log.md
+[ -f "$session_root/progress.md" ]         && cp "$session_root/progress.md"         .github/thk-assets/<session-id>/session-progress.md
+[ -f "$session_root/runtime-profile.json" ] && cp "$session_root/runtime-profile.json" .github/thk-assets/<session-id>/session-runtime-profile.json
 git add .github/thk-assets/<session-id>/
 git commit -m "chore(thk): context bundle for <TICKET-CODE>"
 
@@ -208,11 +216,15 @@ For each `jam/<id>/`:
 
 ### Figma designs
 
-For each `figma/<node-id>/`:
+For each `figma/<node-id>/` — start the entry with the index file so the reader knows what's in the folder before clicking through:
 
-- **Design context:** [context.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/context.md)
-- **Metadata:** [metadata.json](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/metadata.json)
-- **Variables:** [variables.json](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/variables.json)
+- **📋 Index (read this first):** [README.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/README.md)
+- **Design context (prose):** [context.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/context.md)
+- **Code blocks** (only when present): [code/](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/code/) — raw TSX / JSX / HTML / CSS extracted from `context.md` for direct copy/adapt
+- **Metadata:** [metadata.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/metadata.md)
+- **Variables:** [variables.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/variables.md) (only when present)
+- **Libraries:** [libraries.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/libraries.md) (only when present)
+- **Code Connect map:** [code-connect.md](&lt;BLOB&gt;/context/figma/&lt;node-id&gt;/code-connect.md) (only when present)
 - **Screenshots:** same public/private rule as Jam — `![]()` for public, `[]()` link for private.
 - **HTML exports:**
   <details><summary>figma/&lt;node&gt;/html/&lt;name&gt;.html</summary>

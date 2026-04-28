@@ -17,7 +17,7 @@ Invoke the `capture-planetscale` sub-skill via `Skill` when, during any of your 
 - A data-dependent symptom the code alone cannot explain — "this user can't log in", "X records are missing", "field Y shows the wrong value".
 - A plan whose correctness depends on an assumption about row state (e.g. "this column is always non-null") that only the DB can verify.
 
-Skip it when the ticket is purely a render / layout / logic bug with no specific row in play. Fishing expeditions are rejected at the sub-skill's safety gate anyway (read-only, single-statement SELECT, row-limited, credential columns auto-redacted, plus any project-specific table bans declared in the target repo's `AGENTS.md` / `.thk/policies.json`).
+Skip it when the ticket is purely a render / layout / logic bug with no specific row in play. Fishing expeditions are rejected at the sub-skill's safety gate anyway (read-only, single-statement SELECT, row-limited, credential columns auto-redacted, plus any project-specific table bans declared in the target repo's `AGENTS.md` / `.claude/.thk/policies.json`).
 
 Every DB consult you run lands at `<contextDir>/planetscale/<queryName>.md`. Reference it from your review output so downstream readers see the evidence.
 

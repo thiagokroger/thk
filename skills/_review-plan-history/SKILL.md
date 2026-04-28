@@ -92,7 +92,7 @@ When you do run one: plan the narrowest possible SELECT (a targeted WHERE on the
 Skill("_capture-planetscale", { queryName: "<slug>", query: "<SELECT ...>", purpose: "<one-line reason>", contextDir: "<contextDir>" })
 ```
 
-The sub-skill enforces the safety gate (single-statement SELECT, banned keywords, auto-`LIMIT 100`, auto-redaction of credential-like columns, plus any project-specific banned tables declared in `<workdir>/AGENTS.md` or `<workdir>/.thk/policies.json`) and writes `<contextDir>/planetscale/<queryName>.md`. If it returns an error, the gate rejected the query — rephrase or skip, never bypass.
+The sub-skill enforces the safety gate (single-statement SELECT, banned keywords, auto-`LIMIT 100`, auto-redaction of credential-like columns, plus any project-specific banned tables declared in `<workdir>/AGENTS.md` or `<workdir>/.claude/.thk/policies.json`) and writes `<contextDir>/planetscale/<queryName>.md`. If it returns an error, the gate rejected the query — rephrase or skip, never bypass.
 
 If the returned data contradicts, confirms, or adds nuance to a plan assumption, emit a `kind: "data-evidence"` issue citing the file path (`planetscale/<queryName>.md`) and the specific row/column that makes the point. Reference the file from the "Data evidence" section of the review (see §5).
 

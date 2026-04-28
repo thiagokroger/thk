@@ -45,9 +45,9 @@ The script:
    - **Profile** — which model runs each council role (`claude_codex` is the default).
    - **Ticket source MCP** — Linear today; Jira and others slot in later via sibling `capture-<source>` skills.
    - **Optional capture MCPs** — Jam, Figma, PlanetScale, Notion.
-4. Writes `<repo>/.thk/config.json` with the choices.
-5. Checks `<repo>/.gitignore` for `.thk/`; if missing, prompts to add it (recommended, with a skip option). The committed entry keeps sessions, secret keys, and runtime state out of git for everyone on the team. If you skipped Jam in step 3, the gitignore step is purely about session folders.
-6. If you enabled Jam capture, optionally prompts for a Jam personal access token (used by `capture-jam` to download videos and ffmpeg-extract frames at transcript timestamps). Stored at `<repo>/.thk/keys/jam.key` with `chmod 600` inside a `chmod 700` `keys/` dir. Skip-friendly — frame extraction degrades gracefully without it. Future per-source secrets (Linear, GitHub, …) follow the same `<repo>/.thk/keys/<source>.key` convention.
+4. Writes `<repo>/.claude/.thk/config.json` with the choices.
+5. Checks `<repo>/.gitignore` for `.claude/.thk/`; if missing, prompts to add it (recommended, with a skip option). The committed entry keeps sessions, secret keys, and runtime state out of git for everyone on the team. If you skipped Jam in step 3, the gitignore step is purely about session folders.
+6. If you enabled Jam capture, optionally prompts for a Jam personal access token (used by `capture-jam` to download videos and ffmpeg-extract frames at transcript timestamps). Stored at `<repo>/.claude/.thk/keys/jam.key` with `chmod 600` inside a `chmod 700` `keys/` dir. Skip-friendly — frame extraction degrades gracefully without it. Future per-source secrets (Linear, GitHub, …) follow the same `<repo>/.claude/.thk/keys/<source>.key` convention.
 7. Prints the two `/plugin marketplace add` + `/plugin install` lines you need to paste into a Claude Code session, plus a reminder of which MCP servers your Claude Code MCP config needs to expose.
 
 Re-run the script any time to change the profile / source / captures — it prompts before overwriting an existing config.
@@ -65,7 +65,7 @@ Skip the script and paste these straight into a Claude Code session:
 
 `/plugin marketplace add` clones the repo via `gh`'s git credentials, reads `.claude-plugin/marketplace.json`, and registers the `thiago-tools` marketplace. `/plugin install thk@thiago-tools` then installs the `thk` plugin from that marketplace into your local Claude Code plugins cache (the `@` reads as "from"; `<plugin-name>@<marketplace-name>`). If the first command fails with an auth error, run `gh auth status`.
 
-You'll then need to write `<repo>/.thk/config.json` by hand — see the schema below.
+You'll then need to write `<repo>/.claude/.thk/config.json` by hand — see the schema below.
 
 Installs are per-user, per machine.
 
@@ -77,24 +77,27 @@ Installs are per-user, per machine.
 
 Run it, step away. The Hand captures context, drafts a plan, decides whether to convene a Council meeting (and runs the `convene-meeting` skill's plan-side phase if so), publishes and updates a GitHub issue, attaches it to the source ticket, executes the plan (single-agent — the Hand writes the code itself via `execute-plan`), runs verification, **then runs a post-execution review** — either the meeting's diff-side phase if a meeting was convened, or a single Counselor sanity check if not — fixes anything flagged, and finally opens a Draft PR with a description composed by the Grand Maester. The run stops at `pr-drafted` (full happy path) or a blocking outcome (`execution-failed`, `pre-pr-review-failed`, `plan-published-review-failed`, `already-fixed`, `needs-more-info`). Read `progress.md` in the session folder when it's done; `outcome.md` is only present if the run stopped early.
 
-Re-invoking `/thk` on the same ticket is safe and idempotent — the Hand reads `progress.md`, finds the first incomplete step, and resumes from there. **Resume from a different machine** is supported too: the published GitHub issue carries hidden HTML markers (`thk-runner-profile`, `thk-meeting`, `thk-assets-ref`) that the Hand parses out to rehydrate the run state without needing the local session folder.
+Re-invoking `/thk` on the same ticket is safe and idempotent — the Hand reads `progress.md`, finds the first incomplete step, and resumes from there. **Resume from a different machine** is supported too: a prior-run gate (Step 1b.5) reads the Linear ticket's Links panel for an existing thk-managed GH issue, parses the issue's hidden markers (`thk-runner-profile`, `thk-meeting`, `thk-assets-ref`), and either:
+
+- terminates at `already-shipped` if a Draft / open / merged PR already exists, or
+- **rehydrates the prior context** by fetching the assets ref and copying the bundled `context/` + `progress.md` + `runtime-profile.json` into a fresh local session, then resumes from where the prior run left off.
+
+Net effect: thk **never** creates a duplicate GH issue or branch for the same ticket, no matter which machine you re-run from.
 
 ## Configuration — target repo
 
-thk runs from Claude Code's current working directory but operates on a target git repo. Resolution order (first hit wins):
+thk is **per-project** — every piece of state, config, and policy lives at `<targetRepo>/.claude/.thk/`. No home-dir files. The target repo is resolved per call:
 
 1. `$THK_TARGET_REPO` environment variable — absolute path
-2. `$HOME/.claude/thk/workspace.json` — `{ "target_repo": "/absolute/path/to/target-repo" }`
-3. Fallback: `$PWD`
+2. Fallback: `$PWD`
 
-If your launching cwd IS the target, option 3 is fine — no setup needed. Otherwise set option 2 once:
+If your launching cwd IS the target, option 1 isn't needed. To run thk against a different repo from a Claude Code session you launched elsewhere:
 
 ```bash
-mkdir -p "$HOME/.claude/thk"
-cat > "$HOME/.claude/thk/workspace.json" <<'EOF'
-{ "target_repo": "/Users/you/Projects/your-app" }
-EOF
+THK_TARGET_REPO="/Users/you/Projects/your-app" claude
 ```
+
+…or just `cd ~/Projects/your-app && claude` so `$PWD` is the target. Both work; use whichever fits your workflow.
 
 ## Configuration — runtime profiles
 
@@ -125,9 +128,9 @@ Profile selection order is:
 3. `default_profile` from config
 4. Resolver recommendation based on local CLI/config signals
 
-Config files are merged from `${CLAUDE_PLUGIN_ROOT}/config/profiles.json`, `$THK_CONFIG`, `$HOME/.thk/config.json`, `$HOME/.claude/thk/config.json`, and `<targetRepo>/.thk/config.json`. The resolver detects installed commands and auth hints, but it does not claim to verify paid subscriptions.
+Config files are merged from `${CLAUDE_PLUGIN_ROOT}/config/profiles.json` (built-in), `$THK_CONFIG` (explicit override), and `<targetRepo>/.claude/.thk/config.json` (per-project). The resolver detects installed commands and auth hints, but it does not claim to verify paid subscriptions. **No home-dir state by design** — every project's resolved profile is reproducible from files committed in that project.
 
-### Schema — `<repo>/.thk/config.json`
+### Schema — `<repo>/.claude/.thk/config.json`
 
 The repo-local config is what `install.sh` writes; you can also hand-edit it. Every key is optional except `version`.
 
@@ -157,9 +160,9 @@ The repo-local config is what `install.sh` writes; you can also hand-edit it. Ev
 
 `config.json` is **per-developer** (profile preferences, machine-specific). It's gitignored.
 
-### Schema — `<repo>/.thk/policies.json` (team-shared)
+### Schema — `<repo>/.claude/.thk/policies.json` (team-shared)
 
-Project-specific safety + workflow rules that thk consults at runtime. **This file is committed** — `install.sh` and `_scaffold-session` set up the gitignore so `.thk/policies.json` is excepted from the broad `.thk/` exclude.
+Project-specific safety + workflow rules that thk consults at runtime. **This file is committed** — `install.sh` and `_scaffold-session` set up the gitignore so `.claude/.thk/policies.json` is excepted from the broad `.claude/.thk/` exclude.
 
 ```json
 {
@@ -209,10 +212,10 @@ It `git fetch`es origin inside your local `~/.claude/plugins/marketplaces/thiago
 
 ## Session state
 
-Sessions live inside your target repo at `.thk/sessions/<YYYY-MM-DD_HHMMSS>_<ticket-slug>/`:
+Sessions live inside your target repo at `.claude/.thk/sessions/<YYYY-MM-DD_HHMMSS>_<ticket-slug>/`:
 
 ```
-<target-repo>/.thk/sessions/<session-id>/
+<target-repo>/.claude/.thk/sessions/<session-id>/
 ├── progress.md                  ← step tracker (resumption contract)
 ├── runtime-profile.json         ← selected profile snapshot
 ├── log.md                       ← append-only trace of every agent / skill / decision
@@ -223,7 +226,7 @@ Sessions live inside your target repo at `.thk/sessions/<YYYY-MM-DD_HHMMSS>_<tic
     ├── plan.md                  ← the living plan
     ├── linear/                  ← one md per ticket from the Linear MCP, full comment threads (future sources land peer folders, e.g. `jira/`)
     ├── jam/<jam-id>/            ← details, transcript, analysis, console, network, screenshots/
-    ├── figma/<node-id>/         ← context, metadata, variables, screenshots/, html/
+    ├── figma/<node-id>/         ← README.md (index), context, code/ (extracted blocks), metadata, variables, libraries, code-connect, screenshots/, html/
     ├── planetscale/             ← redacted read-only SELECT captures (produced only when the Grand Maester's judgment calls for a DB lookup)
     ├── plan-reviews/
     │   ├── round-1-plan/        ← plan-phase member reviews (only when meeting convened)
@@ -235,7 +238,7 @@ Sessions live inside your target repo at `.thk/sessions/<YYYY-MM-DD_HHMMSS>_<tic
     └── outcome.md               ← only present when the run ends on a blocking outcome
 ```
 
-`install.sh` adds `.thk/` to the target repo's `.gitignore` (with explicit consent during setup) so sessions, secret keys (`.thk/keys/`), and runtime state stay out of `git status` for everyone on the team. The full `context/` folder is bundled into a commit under `.github/thk-assets/<session-id>/context/` and pushed to `refs/thk/<TICKET-CODE>` — a custom ref that lives outside branches and tags (invisible in the branch picker and tags tab, preserved forever). Every link in the issue body is a full `https://github.com/<owner>/<repo>/blob/<commit-sha>/...` URL so they resolve regardless of branch lifecycle.
+`install.sh` adds `.claude/.thk/` to the target repo's `.gitignore` (with explicit consent during setup) so sessions, secret keys (`.claude/.thk/keys/`), and runtime state stay out of `git status` for everyone on the team. The full `context/` folder is bundled into a commit under `.github/thk-assets/<session-id>/context/` and pushed to `refs/thk/<TICKET-CODE>` — a custom ref that lives outside branches and tags (invisible in the branch picker and tags tab, preserved forever). Every link in the issue body is a full `https://github.com/<owner>/<repo>/blob/<commit-sha>/...` URL so they resolve regardless of branch lifecycle.
 
 ### Browsing bundled assets locally
 

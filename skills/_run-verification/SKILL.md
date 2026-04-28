@@ -1,11 +1,11 @@
 ---
 name: _run-verification
-description: Run the verification gauntlet from a session's worktree — install dependencies, type-check, build. Commands are inferred from the project's `package.json` and lockfile (no hardcoded `pnpm`/`tsc`/`build`). Overridable per-project via `<workdir>/.thk/policies.json`. Pre-existing baseline failures are acceptable; new failures introduced by the diff are blockers. Never bypasses build failures.
+description: Run the verification gauntlet from a session's worktree — install dependencies, type-check, build. Commands are inferred from the project's `package.json` and lockfile (no hardcoded `pnpm`/`tsc`/`build`). Overridable per-project via `<workdir>/.claude/.thk/policies.json`. Pre-existing baseline failures are acceptable; new failures introduced by the diff are blockers. Never bypasses build failures.
 ---
 
 # Run Verification
 
-A project-agnostic verification gauntlet. Detects the package manager from the lockfile, looks up the type-check and build commands from `package.json` scripts (with sensible fallbacks), and runs them in order. Per-project overrides live in `<workdir>/.thk/policies.json`.
+A project-agnostic verification gauntlet. Detects the package manager from the lockfile, looks up the type-check and build commands from `package.json` scripts (with sensible fallbacks), and runs them in order. Per-project overrides live in `<workdir>/.claude/.thk/policies.json`.
 
 ## Inputs
 ```
@@ -21,7 +21,7 @@ A project-agnostic verification gauntlet. Detects the package manager from the l
 
 Three commands to run: **install**, **typecheck**, **build**. Each resolves via the same precedence:
 
-1. **Override** in `<workdir>/.thk/policies.json` wins. Format:
+1. **Override** in `<workdir>/.claude/.thk/policies.json` wins. Format:
 
    ```json
    {
@@ -52,7 +52,7 @@ Read whichever lockfile is present in `<workdir>` (first match wins):
 | `bun.lockb` | `bun` | `bun install --frozen-lockfile` |
 | (none, only `package.json`) | `npm` | `npm install` |
 
-If `<workdir>/package.json` doesn't exist at all → return `{ error: "no package.json found at <workdir>; declare custom verification commands in .thk/policies.json (verification.install / verification.typecheck / verification.build) or AGENTS.md" }`. The verification gauntlet's default inference is JS-package-shaped; a Python / Go / Rust / PHP project must declare its own commands via overrides.
+If `<workdir>/package.json` doesn't exist at all → return `{ error: "no package.json found at <workdir>; declare custom verification commands in .claude/.thk/policies.json (verification.install / verification.typecheck / verification.build) or AGENTS.md" }`. The verification gauntlet's default inference is JS-package-shaped; a Python / Go / Rust / PHP project must declare its own commands via overrides.
 
 The lockfile is the **declared** truth — don't fall back to `which pnpm` on the machine. If a teammate's machine doesn't have `pnpm` installed when the lockfile says pnpm, the install will fail loudly, which is correct.
 
@@ -75,14 +75,14 @@ This skip is **not** a failure. Many libraries ship source-only (no compile step
 
 ### 1.5. Persist what was inferred (first-run only)
 
-If any of `verification.{install,typecheck,build}` was **inferred** (not read from an existing `policies.json` override), write the inferred values back to `<workdir>/.thk/policies.json` so subsequent runs skip inference and the team can review / commit / edit the file. This is the auto-bootstrap behavior.
+If any of `verification.{install,typecheck,build}` was **inferred** (not read from an existing `policies.json` override), write the inferred values back to `<workdir>/.claude/.thk/policies.json` so subsequent runs skip inference and the team can review / commit / edit the file. This is the auto-bootstrap behavior.
 
 Behavior:
 
-- If `<workdir>/.thk/policies.json` doesn't exist → create it with a `_meta` block + the inferred `verification` block.
+- If `<workdir>/.claude/.thk/policies.json` doesn't exist → create it with a `_meta` block + the inferred `verification` block.
 - If it exists but lacks `verification.<key>` → merge in only the missing keys, leave existing values alone.
 - If every key was already present → skip the write entirely (no churn).
-- After writing, if the `_meta` block changed, log a one-line stderr notice: `_run-verification: wrote inferred verification commands to <workdir>/.thk/policies.json — review and edit if wrong.`
+- After writing, if the `_meta` block changed, log a one-line stderr notice: `_run-verification: wrote inferred verification commands to <workdir>/.claude/.thk/policies.json — review and edit if wrong.`
 
 File shape:
 
@@ -104,7 +104,7 @@ File shape:
 
 Use `null` (not omission) for skipped steps so subsequent runs can distinguish "intentionally off" from "not yet decided".
 
-`policies.json` is **committed** by default — `_scaffold-session` (and `install.sh`) writes a `.gitignore` block of the form `.thk/` + `!.thk/policies.json` so this file rides along with the team while everything else under `.thk/` stays per-developer.
+`policies.json` is **committed** by default — `_scaffold-session` (and `install.sh`) writes a `.gitignore` block of the form `.claude/.thk/` + `!.claude/.thk/policies.json` so this file rides along with the team while everything else under `.claude/.thk/` stays per-developer.
 
 ### 2. Execute
 
@@ -163,5 +163,5 @@ For build failures specifically: never bypass. Diagnose root cause (missing pack
 - **No silent fallback when a step is configured but fails.** Skipping is allowed only when the step doesn't exist (no script, no TypeScript). If `package.json` declares `scripts.build` and it fails, that's a blocker.
 - **Pre-existing baseline failures are acceptable** — must be conclusively proven via `git stash` comparison. Don't accept a build failure as "probably pre-existing" without checking.
 - **Don't run the test suite by default.** Tests are typically slower and noisier than the gauntlet; opt in via `verification.test` override if a project wants them in the gauntlet.
-- **Summarize long output.** Build logs can be megabytes. Capture the last ~20 lines of any failing command into the envelope's `notes`; write the full output to `<workdir>/.thk/sessions/<id>/log.md` if useful for debugging.
+- **Summarize long output.** Build logs can be megabytes. Capture the last ~20 lines of any failing command into the envelope's `notes`; write the full output to `<workdir>/.claude/.thk/sessions/<id>/log.md` if useful for debugging.
 - **A build failure is always a blocker unless conclusively pre-existing.**
