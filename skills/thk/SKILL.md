@@ -24,6 +24,35 @@ Every council member is a thin **action-dispatcher**. You (the Hand) invoke a me
 
 **Return envelope:** `{ approved, issues?, artifacts?, notes }`.
 
+## The Small Council — who does what
+
+Match the need to the specialist; dispatch the right action. This is the **capability map** — the exact action-name reference is in the [Roster](#roster--agents-and-the-skills-they-own) at the bottom of this file.
+
+| Member | Specialty | Reach for them when… |
+|---|---|---|
+| **Master of Whisperers** | URL-driven intelligence gathering (Linear, Jam, Figma) | You need to capture a ticket, recording, or design from a URL. Many can run in parallel — one Whisperer per URL. |
+| **Master of Ships** | Git plumbing — branches, commits, pushes, PRs, GitHub issues, Linear updates | Anything that touches a remote (commit, push, open/update PR, publish/edit GH issue, post Linear comment, scaffold or tear down a session worktree). Mechanical, never creative. |
+| **Grand Maester** | Correctness scholar — root-cause investigation, code/git history reading, **database lookups (PlanetScale)**, plan-history review, PR-description drafting | The plan or a fix hinges on a specific record's state in the DB; you need a historical incident grounded; the diff needs a correctness sanity-check; or you need a scholarly synthesis (e.g., the Draft PR description). **He owns the DB safety gate** — never plan DB queries yourself, hand him the question. |
+| **Master of Laws** | Rules + verification — TypeScript, linters, tests, documented business rules in `<repo>/AGENTS.md` and `policies.json` | You need to enforce repo conventions on a diff (`review-against-rules`) or run the full verification gauntlet (`run-verification` — install + tsc + build + tests). |
+| **Lord Commander** | Adversarial security review across six lenses (injection, authz, race, exposure, supply-chain, DoS) | The diff touches auth, input handling, sensitive data, or anything you'd be uncomfortable shipping un-attacked. Cite file:line for every finding. |
+| **Master of Coin** | Effort and scope tracker (advisory only — never blocks) | Before drafting a plan you want a sanity-check estimate; mid-execute the diff is bloating past expectations; you want a tech-debt carve-out drafted. |
+| **Counselor** | Final-pass external oversight (foreign expert, not a voting member) | Closing a deliberation. The Counselor runs **only** as the closer of a meeting (Round 2 in `_convene-meeting`) or as Step 6a's no-meeting diff review. Never ad-hoc — that would muddy the audit trail. |
+
+**Two consult patterns:**
+
+- **Inside a meeting (formal):** `_convene-meeting` orchestrates all four voting members in parallel + Counselor closer across two rounds (plan or diff phase). Use for non-trivial tickets — the Step 3 decision triggers this.
+- **Ad-hoc (routine):** Dispatch any non-Counselor member directly at any step. Examples: DB lookup mid-plan, security read on one risky file, scope check mid-execute, rules sanity check before the full verification. Logged as `dispatch`, not as a meeting round. See [Ad-hoc council consults](#ad-hoc-council-consults).
+
+**Common reach-fors at a glance:**
+
+- "I need data from the DB" → Grand Maester (`Skill("_capture-planetscale", ...)`).
+- "Did I break the build?" → Master of Laws (`run-verification`).
+- "Is this diff secure?" → Lord Commander (`red-team-review`).
+- "Is this scope still sane?" → Master of Coin (`scope-check`).
+- "I need to push something to a remote" → Master of Ships (any of his actions — never push directly yourself).
+- "I need to capture a URL" → Master of Whisperers (parallel-safe).
+- "I need a final external read" → Counselor (only as deliberation closer).
+
 ## Runtime profiles
 
 thk is profile-driven. The default profile preserves the original setup (Claude Code council + Codex-backed Counselor Altman), but the King can choose another profile with `$THK_PROFILE` or a config file.
@@ -649,6 +678,83 @@ The skill runs `git push -u origin <branch>` then `gh pr create --draft --title 
 
 Update `progress.md`: Step 7 = done; record `commitSha` and `prUrl`. Set `status: pr-drafted`. **Stop.**
 
+## Step 8 — Revisit the PR (after external review)
+
+Step 7 ends with a Draft PR open. External reviewers — typically CodeRabbit, sometimes humans, sometimes other bots — will leave feedback over the next minutes to hours. The Hand does **not** block waiting; the original `/thk <TICKET>` invocation returns at status `pr-drafted`, and Step 8 is a **separate entry mode**: `/thk revisit <TICKET>`.
+
+This step is invoked in three ways:
+
+1. **Manual:** the King runs `/thk revisit <TICKET>` after seeing reviews land
+2. **Scheduled:** a `/schedule`-spawned background agent fires ~25 minutes after Step 7 completed (offer this at the end of Step 7 if appropriate)
+3. **Cold-start:** invoked from a fresh checkout or different machine — `_revisit-pr`'s rehydration sub-step recovers state from the GitHub issue bundle
+
+### 8a. Detect entry mode and regime
+
+If the prompt starts with `revisit <TICKET>` (or the equivalent in the routing layer) → this is Step 8, not a fresh run. Skip Steps 0–7 entirely.
+
+Resolve the **regime**:
+
+- **Warm:** `<targetRepo>/.claude/.thk/sessions/<id>/` exists for this ticket, with `progress.md` showing `status: pr-drafted`. Pick up `workdir`, `contextDir`, `runtimeProfile`, `prUrl` from the session folder.
+- **Cold:** No session folder for this ticket on disk. The bundle on the GitHub issue is the source of truth — `_revisit-pr` rehydrates from it.
+
+The Hand does not need to handle rehydration logic itself — `_revisit-pr` is self-contained and detects the regime from the inputs it receives.
+
+### 8b. Dispatch `_revisit-pr`
+
+```
+Skill("_revisit-pr", {
+  ticketCode:       "<code>",
+  workdir:          "<warm only — abs>",
+  contextDir:       "<warm only — abs>",
+  sessionRoot:      "<warm only — abs>",
+  targetRepo:       "<abs>",
+  runtimeProfile:   <resolved profile from Step 0>,
+  prUrl:            "<warm only — from progress.md>",
+  reviewBots:       <from policies.json `pr_review_bots` array>,
+  meetingThreshold: <from policies.json `revisit_meeting_threshold`, default 3>
+})
+  → returns { success, rehydrated, round, findings, meetingEscalated, verificationOutcome,
+              newCommits, headShaAfter, prCommentUrl, notes? }
+```
+
+The skill:
+
+1. Rehydrates if cold (Master of Whisperers + Master of Ships' new `rehydrate-from-issue` action)
+2. Pulls PR feedback via `gh pr view` + `gh api .../pulls/<n>/comments`
+3. Triages findings into accept / defer / decline (the Hand drives; reaches for Grand Maester or Lord Commander ad-hoc when uncertain)
+4. Escalates to a diff-phase meeting only if accepted-finding count ≥ threshold OR any finding is `severity: critical`
+5. Implements accepted findings as new commits (one per logical group)
+6. Re-runs verification (Master of Laws)
+7. Pushes commits (Master of Ships' new `push-revisit-commits` — fast-forward only, no force)
+8. Posts the summary comment + per-thread replies (Master of Ships' new `post-revisit-summary`)
+9. Re-bundles the session into the GitHub issue (Master of Ships' `update-github-issue`)
+
+### 8c. Update progress.md and exit status
+
+The session's `progress.md` gains a new section per revisit round:
+
+```markdown
+### 8 — Revisit round <N>
+- State: done | failed
+- Regime: warm | cold (rehydrated from `<assets-ref>@<sha>`)
+- Findings: total=<n> coderabbit=<n> humans=<n> stale=<n>
+- Verdicts: accept=<n> defer=<n> decline=<n>
+- Meeting escalated: yes / no
+- Verification: green | failed-after-retries
+- New commits: [<sha-1>, <sha-2>, ...]
+- Head SHA after: <sha>
+- PR comment: <url>
+```
+
+Status transitions:
+
+- Success → `status: pr-revisited` (revisit can run again on a future round; this isn't a terminal state)
+- Verification fails after the cap → `status: pr-revisit-verification-failed`
+- Meeting escalated and didn't converge → `status: pr-revisit-meeting-failed`
+- No actionable findings (all praise / approvals) → `status: pr-revisited` with `findings.total: 0`, no work done
+
+Step 8 is **idempotent across rounds** — invoking `/thk revisit` again later runs round N+1 against whatever feedback has accumulated since the last round.
+
 ## Ad-hoc council consults
 
 The Council members are always dispatchable, regardless of whether you convened a meeting. Step 3 decides only whether the *formal* multi-round meeting structure runs — it doesn't gate routine specialist consults.
@@ -676,7 +782,7 @@ The Counselor is *not* dispatched ad-hoc — by design, it runs only as the clos
 **Ticket URL:** <url>
 **Started:** <ISO 8601>
 **Last updated:** <ISO 8601>
-**Status:** in-progress | plan-published | plan-finalized | plan-reviewed | plan-published-review-failed | execution-failed | pre-pr-review-failed | pr-drafted | already-shipped | already-fixed | needs-more-info | needs-jam-token | failed
+**Status:** in-progress | plan-published | plan-finalized | plan-reviewed | plan-published-review-failed | execution-failed | pre-pr-review-failed | pr-drafted | pr-revisited | pr-revisit-verification-failed | pr-revisit-meeting-failed | already-shipped | already-fixed | needs-more-info | needs-jam-token | failed
 **Runtime profile:** <selected_profile>
 
 ## Steps
@@ -748,6 +854,18 @@ The Counselor is *not* dispatched ad-hoc — by design, it runs only as the clos
 - 7c PR URL: <url>
 - Linear comment posted: yes / no
 
+### 8 — Revisit round <N> (one section per revisit invocation)
+- State: pending | done | failed
+- Regime: warm | cold (rehydrated from <assets-ref>@<sha>)
+- Findings: total=<n> coderabbit=<n> humans=<n> other-bots=<n> stale=<n>
+- Verdicts: accept=<n> defer=<n> decline=<n>
+- Meeting escalated: yes / no
+- Verification: green | failed-after-retries
+- New commits: [<sha>, <sha>, ...]
+- Head SHA after: <sha>
+- PR comment: <url>
+- Deferred tech-debt tickets: [<url>, ...]
+
 ## Notes
 <free-form — include any privacy warnings returned by publish/update, plan deviations surfaced during execution, etc.>
 ```
@@ -807,7 +925,7 @@ If you need to capture a long payload, write it to `context/<subfolder>/<name>.m
 |--------|---------------------------|
 | Hand (you) | `execute-plan` (sole agent — you drive the implementation, dispatching only verification + commit + PR) |
 | Master of Whisperers | `capture-linear`, `capture-jam`, `capture-figma` |
-| Master of Ships | `resolve-base-branch`, `scaffold-session`, `commit-changes`, `push-and-open-pr`, `publish-plan-to-github`, `update-github-issue`, `announce-plan-completion`, `create-linear-followup-ticket`, `cleanup-session` |
+| Master of Ships | `resolve-base-branch`, `scaffold-session`, `commit-changes`, `push-and-open-pr`, `publish-plan-to-github`, `update-github-issue`, `announce-plan-completion`, `create-linear-followup-ticket`, `cleanup-session`, `rehydrate-from-issue`, `push-revisit-commits`, `post-revisit-summary` |
 | Grand Maester | `investigate-root-cause`, `review-correctness`, `review-plan-history`, `draft-pr-description` |
 | Master of Laws | `review-against-rules`, `run-verification`, `review-plan-rules` |
 | Lord Commander | `red-team-review`, `review-plan-security` |

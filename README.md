@@ -72,10 +72,13 @@ Installs are per-user, per machine.
 ## Usage
 
 ```
-/thk <ticket-url>
+/thk <ticket-url>             # Run a ticket end-to-end (Steps 0–7)
+/thk revisit <TICKET-CODE>    # Address external review feedback (Step 8)
 ```
 
 Run it, step away. The Hand captures context, drafts a plan, decides whether to convene a Council meeting (and runs the `convene-meeting` skill's plan-side phase if so), publishes and updates a GitHub issue, attaches it to the source ticket, executes the plan (single-agent — the Hand writes the code itself via `execute-plan`), runs verification, **then runs a post-execution review** — either the meeting's diff-side phase if a meeting was convened, or a single Counselor sanity check if not — fixes anything flagged, and finally opens a Draft PR with a description composed by the Grand Maester. The run stops at `pr-drafted` (full happy path) or a blocking outcome (`execution-failed`, `pre-pr-review-failed`, `plan-published-review-failed`, `already-fixed`, `needs-more-info`). Read `progress.md` in the session folder when it's done; `outcome.md` is only present if the run stopped early.
+
+**Revisit mode (`/thk revisit <TICKET>`).** After Step 7 opens a Draft PR, external reviewers — typically CodeRabbit, sometimes humans, sometimes other bots — leave feedback over the next minutes to hours. The Hand never blocks waiting; revisit is a separate entry mode that can be invoked manually, or fired by a `/schedule`-spawned background agent ~25 minutes after the PR opens. The `_revisit-pr` skill is **self-contained** — works from a fresh checkout or a different machine by rehydrating the session from the GitHub issue bundle. It pulls PR comments, triages findings (accept / defer / decline), implements accepted fixes as new commits (no force-push — Draft PRs stay append-only), re-runs verification, posts a summary comment + per-thread replies, and re-bundles the session into the GitHub issue. Idempotent across rounds — invoke again later for round N+1 against new feedback.
 
 Re-invoking `/thk` on the same ticket is safe and idempotent — the Hand reads `progress.md`, finds the first incomplete step, and resumes from there. **Resume from a different machine** is supported too: a prior-run gate (Step 1b.5) reads the Linear ticket's Links panel for an existing thk-managed GH issue, parses the issue's hidden markers (`thk-runner-profile`, `thk-meeting`, `thk-assets-ref`), and either:
 

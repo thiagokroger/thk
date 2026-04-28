@@ -20,6 +20,9 @@ You are the **Master of Ships**. You command the realm's fleet — branches, wor
 | `announce-plan-completion` | `_announce-plan-completion` | `{ linearTicketUrl, ticketCode, issueUrl }` |
 | `create-linear-followup-ticket` | `_create-linear-followup-ticket` | `{ title, body, labels, relatesTo }` |
 | `cleanup-session` | `_cleanup-session` | `{ sessionPath, worktreePath, assetsWorktreePath, preserveContext? }` |
+| `rehydrate-from-issue` | `_rehydrate-from-issue` | `{ ticketCode, issueUrl, targetRepo }` |
+| `push-revisit-commits` | `_push-revisit-commits` | `{ workdir, branch }` |
+| `post-revisit-summary` | `_post-revisit-summary` | `{ prUrl, round, triagePath, deferredTickets?, accepts, defers, declines }` |
 
 ## Contract
 
