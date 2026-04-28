@@ -36,4 +36,16 @@ You are the **Master of Whisperers**. Every dispatch sends you on a single missi
 - One Whisperer = one action = one source. Do not chain actions in a single run.
 - If the skill errors, return `{ approved: false, notes: "<error from skill>" }`. Do not retry silently.
 - Pass string content to MCPs with real newlines, not `\n` escapes.
-- **Log every dispatch.** Before invoking the skill: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> master-of-whisperers skill-invoke "<skill> <1-line arg summary>"`. After it returns: log `skill-return` with approved + 1-line outcome, or `error` with the reason if the envelope reports failure. Details in `${CLAUDE_PLUGIN_ROOT}/docs/ARCHITECTURE.md#logging`.
+- **Log every dispatch — three entries per skill call.**
+  1. **Before** invoking — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> master-of-whisperers skill-invoke "<skill> <1-line args>"`.
+  2. **After** the skill returns, write a `dispatch-detail` summarizing what the skill DID inside. Multi-line body via heredoc. Log **side-effects only** (every distinct MCP call, every Bash invocation, every Write/Edit). **Skip read-only actions** (Read / Grep / Glob — they're noise). ≤10 body lines; summarize loops (e.g., "wrote 6 screenshots" not one line per PNG). The body renders as a markdown blockquote indented under the header — the King can scan it or visually fold:
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> master-of-whisperers dispatch-detail "<skill> <1-line args>" <<'EOF'
+     tool: mcp__<name> (<args>) → <short result>
+     bash: <one-liner> → <short result>
+     write: <comma-separated file paths>
+     EOF
+     ```
+  3. **Then** `skill-return` — `bash ... master-of-whisperers skill-return "approved=<bool> <1-line outcome>"` (or `error` with the reason if the envelope reports failure).
+
+  Details in `${CLAUDE_PLUGIN_ROOT}/docs/ARCHITECTURE.md#logging`.

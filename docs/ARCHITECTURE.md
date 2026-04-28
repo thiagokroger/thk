@@ -309,7 +309,7 @@ The resolved `targetRepo` is passed as `workdir` to every dispatch. It is also p
 
 ## Logging
 
-Every session keeps an **append-only log** at `<targetRepo>/.claude/.thk/sessions/<session-id>/log.md`. The Hand and every council member append one line per meaningful interaction — `step-start`, `step-done`, `dispatch`, `skill-invoke`, `skill-return`, `decision`, `error`. When anything goes wrong, the log is the first place to look; at session end `publish-plan-to-github` / `update-github-issue` bundle `log.md` as `session-log.md` alongside the committed context, so the GitHub issue carries the full debug trail.
+Every session keeps an **append-only log** at `<targetRepo>/.claude/.thk/sessions/<session-id>/log.md`. The Hand and every council member append entries per meaningful interaction — `step-start`, `step-done`, `dispatch`, `skill-invoke`, `dispatch-detail`, `skill-return`, `decision`, `error`. When anything goes wrong, the log is the first place to look; at session end `publish-plan-to-github` / `update-github-issue` bundle `log.md` as `session-log.md` alongside the committed context, so the GitHub issue carries the full debug trail.
 
 The logger lives at `${CLAUDE_PLUGIN_ROOT}/scripts/log.sh`:
 
@@ -318,6 +318,28 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/log.sh <session-root|contextDir|worktree> <ac
 ```
 
 The first argument accepts the session root, the contextDir, or the worktree — the script normalizes. Short appends are atomic on POSIX so parallel sub-agents can all write without a mutex. The log is created on first call.
+
+### `dispatch-detail` — foldable history of what each subagent did
+
+Most events are single-line. `dispatch-detail` is the exception: it carries a multi-line markdown blockquote body summarizing what a skill DID inside (every distinct MCP call, every Bash invocation, every Write/Edit). Read-only actions (Read / Grep / Glob) are noise — skip them.
+
+The body is read from stdin, indented one level (`> `) so it renders as a foldable blockquote under the event header in markdown viewers. The King can scan the headers; expand a `dispatch-detail` to see what the skill actually did.
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/log.sh <session-root> <actor> dispatch-detail "<skill> <1-line args>" <<'BODY'
+tool: mcp__<name> (<args>) → <short result>
+bash: <one-liner> → <short result>
+write: <comma-separated file paths>
+BODY
+```
+
+**Three-entry pattern.** Every skill dispatch by a council member produces three log entries:
+
+1. `skill-invoke` — single-line header: which skill, which args
+2. `dispatch-detail` — multi-line body: what the skill did
+3. `skill-return` — single-line footer: outcome (`approved=<bool> <one-line>` or `error: <reason>`)
+
+The Hand drives directly during `_execute-plan` and follows the same pattern with actor `hand`. Each agent's Rules entry has the exact incantations.
 
 The Hand's SKILL.md has the full logging contract at step granularity. Each council member's agent file has a Rules entry covering their dispatches.
 

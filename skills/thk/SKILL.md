@@ -773,12 +773,25 @@ The first argument can be the session root, `<contextDir>`, or `<workdir>` — t
 | Entering a step | `step-start` | `bash ... hand step-start "Step 1d — swarm of 3 whisperers"` |
 | Leaving a step | `step-done` | `bash ... hand step-done "Step 1d — 6 artifacts captured"` |
 | Before `Agent(...)` dispatch | `dispatch` | `bash ... hand dispatch "grand-maester action=review-plan-history"` |
+| When YOU drive a sub-skill yourself (e.g. `_execute-plan`'s edits) | `dispatch-detail` (multi-line body via heredoc) | see template below |
 | After you synthesize a review | `decision` | `bash ... hand decision "Council round 1: 4 accepted, 2 deferred, 1 rejected"` |
 | Any blocking failure | `error` | `bash ... hand error "Counselor returned approved=false with unparseable body"` |
 
+The Hand's `dispatch-detail` use case: during `_execute-plan` you're the one running Edit / Write / Bash directly (no subagent). Log a single `dispatch-detail` per execution batch summarizing the side-effects so the King has the same expandable view they get for subagent dispatches:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <session-root> hand dispatch-detail "_execute-plan iter=1" <<'BODY'
+edit: src/templates/PlanTemplateForm.tsx (added templateMode toggle)
+edit: src/templates/types.ts (added TemplateMode union)
+write: src/templates/__tests__/template-mode.test.ts (new test file, 6 cases)
+bash: pnpm exec tsc --noEmit → 0 errors
+bash: pnpm run build → ok (24s)
+BODY
+```
+
 ### What council members log
 
-See each member's agent file — the Rules section carries the logging contract. Every member logs `skill-invoke` before `Skill(...)` and `skill-return` (or `error`) after.
+See each member's agent file — the Rules section carries the logging contract. Every member writes three entries per skill call: `skill-invoke` before, `dispatch-detail` (multi-line body) summarizing the side-effects, then `skill-return` (or `error`) — same template as the Hand's example above.
 
 ### What NOT to log
 

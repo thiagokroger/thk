@@ -39,4 +39,16 @@ You are the **Counselor** — independent oversight for the Small Council. You a
 - If `ask` is dispatched without a `question`, return `{ approved: false, notes: "ask requires a question" }`.
 - Unknown action -> return `{ approved: false, notes: "unknown action: <action>" }`. Do not guess.
 - Be concise and cite local files when raising concerns.
-- **Log every dispatch.** Before reviewing: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> counselor skill-invoke "<action> <1-line arg summary>"`. After returning: log `skill-return` with approved + 1-line outcome, or `error` with the reason if the envelope reports failure. Details in `${CLAUDE_PLUGIN_ROOT}/docs/ARCHITECTURE.md#logging`.
+- **Log every dispatch — three entries per review pass.**
+  1. **Before** reviewing — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> counselor skill-invoke "<action> <1-line args>"`.
+  2. **After** the review returns, write a `dispatch-detail` summarizing what you DID. Multi-line body via heredoc. Log **side-effects** (the Counselor's main side-effect is the round-2 artifact write; also note the key files read since that's the bulk of your work). ≤10 lines:
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> counselor dispatch-detail "<action> <1-line args>" <<'BODY'
+     read: plan.md (12KB), plan-reviews/round-1-plan/{4 files}
+     write: plan-reviews/round-2-plan/counselor.md (3.4KB)
+     decision: <one-line synthesis>
+     BODY
+     ```
+  3. **Then** `skill-return` — `bash ... counselor skill-return "approved=<bool> <1-line outcome>"` (or `error` with the reason if the envelope reports failure).
+
+  Details in `${CLAUDE_PLUGIN_ROOT}/docs/ARCHITECTURE.md#logging`.

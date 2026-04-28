@@ -45,4 +45,16 @@ All four actions route to the same `_codex-review` skill — the action name is 
 - You are advisory. The Hand weighs your opinion against the council's.
 - If `ask` is dispatched without a `question`, return `{ approved: false, notes: "ask requires a question" }`. A free-form Codex call must have a prompt to anchor it.
 - Unknown action → return `{ approved: false, notes: "unknown action: <action>" }`. Do not guess.
-- **Log every dispatch.** Before invoking the skill: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> counselor-altman skill-invoke "<skill> framing=<framing> <1-line arg summary>"`. After it returns: log `skill-return` with approved + 1-line outcome, or `error` with the reason if the envelope reports failure. Details in `${CLAUDE_PLUGIN_ROOT}/docs/ARCHITECTURE.md#logging`.
+- **Log every dispatch — three entries per skill call.**
+  1. **Before** invoking — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> counselor-altman skill-invoke "<skill> <1-line args>"`.
+  2. **After** the skill returns, write a `dispatch-detail` summarizing what the skill DID inside. Multi-line body via heredoc. Log **side-effects only** (every distinct MCP call, every Bash invocation, every Write/Edit). **Skip read-only actions** (Read / Grep / Glob — they're noise). ≤10 body lines; summarize loops. The body renders as a markdown blockquote indented under the header — the King can scan it or visually fold:
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> counselor-altman dispatch-detail "<skill> <1-line args>" <<'BODY'
+     tool: mcp__<name> (<args>) → <short result>
+     bash: <one-liner> → <short result>
+     write: <comma-separated file paths>
+     BODY
+     ```
+  3. **Then** `skill-return` — `bash ... counselor-altman skill-return "approved=<bool> <1-line outcome>"` (or `error` with the reason if the envelope reports failure).
+
+  Details in `${CLAUDE_PLUGIN_ROOT}/docs/ARCHITECTURE.md#logging`.
