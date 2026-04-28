@@ -74,6 +74,12 @@ for member in master-of-whisperers master-of-ships grand-maester master-of-laws 
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/write-agent-placeholder.sh" "$member" "$target"
 done
 
+# Bootstrap policies.json review block (meeting-decision policy + simple-path
+# Counselor toggle). Same pattern as _capture-planetscale and _run-verification —
+# auto-merge missing keys; never overwrite existing values. Uses jq if
+# available, otherwise a Node one-liner via the Claude Code-bundled node.
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-review-policies.sh" "<targetRepo>"
+
 mkdir -p \
   <sessionPath>/context/plan-reviews/round-1-plan \
   <sessionPath>/context/plan-reviews/round-2-plan \
