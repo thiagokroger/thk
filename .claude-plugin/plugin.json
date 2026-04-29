@@ -1,6 +1,6 @@
 {
   "name": "thk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Hand of the King — a ticket-to-Draft-PR orchestrator that runs as a Claude Code plugin. Captures context (ticket source MCP — Linear today, Jira later; plus Jam, Figma, PlanetScale, Notion), drafts a plan, optionally summons a Small Council of reviewers, executes the plan as a single agent, opens a Draft PR. Pluggable surfaces: ticket source MCP and council/counselor runners (Claude / Codex CLI / Gemini CLI via profiles). The Hand itself is host-bound to Claude Code.",
   "author": {
     "name": "Thiago Kroger"
