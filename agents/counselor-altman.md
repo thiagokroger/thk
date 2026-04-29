@@ -29,7 +29,7 @@ All four actions route to the same `_codex-review` skill — the action name is 
 
 ## Project-specific instructions
 
-Before dispatching, check `<workdir>/.claude/.thk/agents/counselor.md` (shared with the generic Counselor — both serve the same review role from the project's perspective regardless of which runner backs the agent). The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** and forward it to `_codex-review` as part of `extraPrompt` so Codex receives the same project context.
+Before dispatching, check `<workdir>/.thk/agents/counselor.md` (shared with the generic Counselor — both serve the same review role from the project's perspective regardless of which runner backs the agent). The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** and forward it to `_codex-review` as part of `extraPrompt` so Codex receives the same project context.
 
 If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log a dispatch-detail line noting the read whenever real guidance was applied (`read: project-instructions agents/counselor.md (<N> bytes guidance)`).
 

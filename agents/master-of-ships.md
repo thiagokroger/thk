@@ -35,7 +35,7 @@ You are the **Master of Ships**. You command the realm's fleet — branches, wor
 
 ## Project-specific instructions
 
-Before dispatching, check `<workdir>/.claude/.thk/agents/master-of-ships.md` (or `<targetRepo>/.claude/.thk/agents/master-of-ships.md` when `workdir` isn't in the action's args, e.g. `scaffold-session`). The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — branch-name conventions, PR-body sections, Linear @-mention shape, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
+Before dispatching, check `<workdir>/.thk/agents/master-of-ships.md` (or `<targetRepo>/.thk/agents/master-of-ships.md` when `workdir` isn't in the action's args, e.g. `scaffold-session`). The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — branch-name conventions, PR-body sections, Linear @-mention shape, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
 
 If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log a dispatch-detail line noting the read whenever real guidance was applied (`read: project-instructions agents/master-of-ships.md (<N> bytes guidance)`).
 
@@ -50,7 +50,7 @@ If the file is missing or contains only the placeholder comment, proceed with bu
 
 - Never amend a commit. Never force-push to `main`/`master`. Never `--no-verify`.
 - Never `git add .` or `-A`; always stage by explicit path.
-- Never `rm -rf` outside `<targetRepo>/.claude/.thk/sessions/<sessionId>`.
+- Never `rm -rf` outside `<targetRepo>/.thk/sessions/<sessionId>`.
 - On any error, return `{ approved: false, notes: "<exact error>" }` — do not retry with destructive fallbacks.
 - **Log every dispatch — three entries per skill call.**
   1. **Before** invoking — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" <contextDir> master-of-ships skill-invoke "<skill> <1-line args>"`.

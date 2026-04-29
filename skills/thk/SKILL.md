@@ -70,7 +70,7 @@ Profile config is resolved in this order (thk is per-project — no home-dir sta
 
 1. `${CLAUDE_PLUGIN_ROOT}/config/profiles.json` (built-in defaults)
 2. `$THK_CONFIG`, if set (explicit override)
-3. `<targetRepo>/.claude/.thk/config.json` (committed alongside the project — what `install.sh` writes)
+3. `<targetRepo>/.thk/config.json` (committed alongside the project — what `install.sh` writes)
 
 ### Profile-aware dispatch
 
@@ -87,10 +87,10 @@ In the Claude plugin frontend, `hand.runner` is a cross-frontend declaration onl
 
 ## Sessions
 
-Every invocation runs inside a **session folder** at `<targetRepo>/.claude/.thk/sessions/<session-id>/`:
+Every invocation runs inside a **session folder** at `<targetRepo>/.thk/sessions/<session-id>/`:
 
 ```
-<targetRepo>/.claude/.thk/sessions/<session-id>/
+<targetRepo>/.thk/sessions/<session-id>/
 ├── progress.md              ← step tracker (you maintain this)
 ├── runtime-profile.json     ← selected profile snapshot for deterministic resume
 ├── worktree/                ← code worktree on the session branch (created by Ships `scaffold-session`)
@@ -114,7 +114,7 @@ Every invocation runs inside a **session folder** at `<targetRepo>/.claude/.thk/
 
 **Session ID format:** `<YYYY-MM-DD>_<HHMMSS>_<slug>` — e.g. `2026-04-22_143000_eng-10105`.
 
-Sessions live under `<targetRepo>/.claude/.thk/sessions/` — inside the target repo. `.claude/.thk/` is excluded by git so sessions stay out of `git status`. `install.sh` is the canonical place for that exclude (it prompts during setup), but for users who install via the Claude Code marketplace alone, `scaffold-session` auto-adds `.claude/.thk/` to `.gitignore` on first run as a backstop. The plugin install (at `${CLAUDE_PLUGIN_ROOT}`) is separate and untouched by session state.
+Sessions live under `<targetRepo>/.thk/sessions/` — inside the target repo. `.thk/` is excluded by git so sessions stay out of `git status`. `install.sh` is the canonical place for that exclude (it prompts during setup), but for users who install via the Claude Code marketplace alone, `scaffold-session` auto-adds `.thk/` to `.gitignore` on first run as a backstop. The plugin install (at `${CLAUDE_PLUGIN_ROOT}`) is separate and untouched by session state.
 
 ## Single-call execution
 
@@ -137,7 +137,7 @@ No mid-run interaction. The King reads `progress.md` and (if present) `outcome.m
 You handle every entry condition the King throws at you. Before doing any work, figure out where this ticket currently is:
 
 1. Derive the ticket slug from the URL (lowercased, hyphenated — `eng-10105`).
-2. `ls <targetRepo>/.claude/.thk/sessions/` and find directories ending in `_<slug>`, most recent first.
+2. `ls <targetRepo>/.thk/sessions/` and find directories ending in `_<slug>`, most recent first.
 3. For each match, read `progress.md` and inspect `status`:
    - **Terminal — skip and look for an older session, or mint a new one if none remain:** `pr-drafted`, `already-shipped`, `execution-failed`, `pre-pr-review-failed`, `plan-published-review-failed`, `already-fixed`, `needs-more-info`, `failed`.
    - **Fixable — resume in place if the user has addressed the blocker:** `needs-jam-token`. Re-check the preflight at Step 1c.5; if it now passes, continue from Step 1d. If still missing, refuse to mint a new session — point the user back at the existing `outcome.md`.
@@ -172,7 +172,7 @@ thk runs from wherever Claude Code was launched and operates on a target git rep
 
     Note the resolved source in `progress.md` under Notes so the King knows which path the run used. (thk is per-project; there's no home-dir workspace pointer. Either launch Claude Code from inside the target repo, or set `THK_TARGET_REPO` in your shell.)
 
-2. **`sessionsBase`** — always `<targetRepo>/.claude/.thk/sessions/`. Sessions live inside the target repo. `install.sh` adds `.claude/.thk/` to `.gitignore` (with the user's consent) so sessions stay out of `git status`; for marketplace-only installs that bypass the script, `scaffold-session` auto-adds the entry on first run.
+2. **`sessionsBase`** — always `<targetRepo>/.thk/sessions/`. Sessions live inside the target repo. `install.sh` adds `.thk/` to `.gitignore` (with the user's consent) so sessions stay out of `git status`; for marketplace-only installs that bypass the script, `scaffold-session` auto-adds the entry on first run.
 
 Sanity-check: `test -d "<targetRepo>/.git"` — if it's not a git repo, write `outcome.md` with status `failed` and reason `targetRepo is not a git repo` and stop.
 
@@ -338,10 +338,10 @@ If **none** of the harvested Jam URLs are video jams → no token required, cont
 If **any** are video jams, check token availability in this order — first hit wins:
 
 1. `$JAM_TOKEN` environment variable.
-2. `<targetRepo>/.claude/.thk/keys/jam.key` — file exists and is non-empty.
+2. `<targetRepo>/.thk/keys/jam.key` — file exists and is non-empty.
 3. `~/.jamtoken` — file exists and is non-empty.
 
-Use a short bash check (`[ -n "${JAM_TOKEN:-}" ] || [ -s <repo>/.claude/.thk/keys/jam.key ] || [ -s ~/.jamtoken ]`) to determine presence — don't read the token's value, just whether it's there.
+Use a short bash check (`[ -n "${JAM_TOKEN:-}" ] || [ -s <repo>/.thk/keys/jam.key ] || [ -s ~/.jamtoken ]`) to determine presence — don't read the token's value, just whether it's there.
 
 **If a video jam exists AND no token is present** → write `<contextDir>/outcome.md` with status `needs-jam-token`:
 
@@ -366,7 +366,7 @@ in **one** of these places (first hit wins):
 | Where | When to use |
 |-------|-------------|
 | `export JAM_TOKEN=<token>` (then re-launch Claude Code) | Per-session, ad-hoc |
-| `<targetRepo>/.claude/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here |
+| `<targetRepo>/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here |
 | `~/.jamtoken` (chmod 600) | User-global, all repos |
 
 Then re-invoke `/thk <same-ticket-url>` — this session resumes from Step 1c.5 and proceeds normally.
@@ -497,7 +497,7 @@ Step 2b published the plan as a standalone handoff. Now decide whether the ticke
 
 ### 3.0. Resolve policy override (cheap, runs first)
 
-Read `<targetRepo>/.claude/.thk/policies.json:review.meeting_decision`:
+Read `<targetRepo>/.thk/policies.json:review.meeting_decision`:
 
 - `"auto"` (default — bootstrapped if absent) → consult the Grand Maester (Step 3.1).
 - `"always"` → skip the Grand Maester check, convene a meeting unconditionally. Record the decision and continue at 3b.
@@ -635,7 +635,7 @@ The implementation is on disk and verification is green, but nobody has looked a
 
 Default flow. The Counselor (single advisor — Codex CLI in the `claude_codex` profile, Claude in `claude_only`) reviews the diff with one question: **was the plan executed well?** No full Council round, no scope sprawl, just sanity oversight.
 
-**Counselor pass is policy-controlled** — read `<targetRepo>/.claude/.thk/policies.json:review.counselor_on_simple_path`:
+**Counselor pass is policy-controlled** — read `<targetRepo>/.thk/policies.json:review.counselor_on_simple_path`:
 
 - `true` (default — bootstrapped if absent) → run the Counselor pass below.
 - `false` → skip Step 6a entirely and proceed to Step 7.
@@ -755,7 +755,7 @@ If the prompt starts with `revisit <TICKET>` (or the equivalent in the routing l
 
 Resolve the **regime**:
 
-- **Warm:** `<targetRepo>/.claude/.thk/sessions/<id>/` exists for this ticket, with `progress.md` showing `status: pr-drafted`. Pick up `workdir`, `contextDir`, `runtimeProfile`, `prUrl` from the session folder.
+- **Warm:** `<targetRepo>/.thk/sessions/<id>/` exists for this ticket, with `progress.md` showing `status: pr-drafted`. Pick up `workdir`, `contextDir`, `runtimeProfile`, `prUrl` from the session folder.
 - **Cold:** No session folder for this ticket on disk. The bundle on the GitHub issue is the source of truth — `_revisit-pr` rehydrates from it.
 
 The Hand does not need to handle rehydration logic itself — `_revisit-pr` is self-contained and detects the regime from the inputs it receives.
@@ -862,7 +862,7 @@ The Counselor is *not* dispatched ad-hoc — by design, it runs only as the clos
   - (if rehydrated) Bundle source-id: <prior session-id from .github/thk-assets/>
 - Preflight (Step 1c.5):
   - Video jams found: <count>
-  - Jam token source: env JAM_TOKEN | <repo>/.claude/.thk/keys/jam.key | ~/.jamtoken | none
+  - Jam token source: env JAM_TOKEN | <repo>/.thk/keys/jam.key | ~/.jamtoken | none
   - Outcome: passed | halted (needs-jam-token) | bypassed (THK_SKIP_JAM_FRAMES=1)
 
 ### 2a — Plan draft

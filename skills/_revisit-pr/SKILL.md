@@ -16,7 +16,7 @@ This skill is **self-contained** — it can be invoked by the Hand (Step 8), by 
   ticketCode:     "<ENG-10105>",
   workdir?:       "<abs — code worktree if warm; absent or stale if cold>",
   contextDir?:    "<abs — session context if warm; absent if cold>",
-  sessionRoot?:   "<abs — <repo>/.claude/.thk/sessions/<id>/ if warm>",
+  sessionRoot?:   "<abs — <repo>/.thk/sessions/<id>/ if warm>",
   targetRepo:     "<abs — the repo root, always known>",
   runtimeProfile: <resolved profile object — re-resolved by the Hand at Step 0>,
   prUrl?:         "<https://github.com/owner/repo/pull/N — preferred; if absent, derived from ticket links>",
@@ -53,7 +53,7 @@ This skill is **self-contained** — it can be invoked by the Hand (Step 8), by 
 
 ### 0a. Read (or auto-bootstrap) `revisit` policies
 
-Before pulling reviews, resolve two values from `<targetRepo>/.claude/.thk/policies.json`:
+Before pulling reviews, resolve two values from `<targetRepo>/.thk/policies.json`:
 
 ```json
 {
@@ -88,7 +88,7 @@ Agent(master-of-whisperers, prompt="action: capture-linear. ticketCode: <code>. 
   → returns { issueData, links: [...], comments: [...] }
 ```
 
-The capture writes `<targetRepo>/.claude/.thk/sessions/<new-or-reused-id>/context/linear/<code>/` and returns the parsed issue. Inspect `links[]` for two pointers:
+The capture writes `<targetRepo>/.thk/sessions/<new-or-reused-id>/context/linear/<code>/` and returns the parsed issue. Inspect `links[]` for two pointers:
 
 - A GitHub **issue** under the configured `<owner>/<repo>` whose body contains the `<!-- thk-runner-profile -->` marker (the durable thk session log)
 - A GitHub **pull request** under the same repo (the Draft PR)
@@ -105,7 +105,7 @@ Agent(master-of-ships, prompt="action: rehydrate-from-issue. ticketCode: <code>.
 This action (Master of Ships will own its `_rehydrate-from-issue` skill — see [Plumbing details](#plumbing-rehydrate)) does:
 
 1. Parse the issue body for `<!-- thk-assets-ref -->` and `<!-- thk-runner-profile -->` markers
-2. `git fetch origin <assetsRef>` → check out the orphan asset commit into `<targetRepo>/.claude/.thk/sessions/<reused-id>/assets-worktree/`
+2. `git fetch origin <assetsRef>` → check out the orphan asset commit into `<targetRepo>/.thk/sessions/<reused-id>/assets-worktree/`
 3. Copy `session-log.md`, `session-progress.md`, `session-runtime-profile.json`, and `context/` out of the asset commit into the new session folder
 4. From `runtime-profile.json` read `prUrl` and the head branch + SHA
 5. `git fetch origin <headBranch>` then `git worktree add <sessionRoot>/worktree origin/<headBranch>` — the worktree is now at the PR head, not main
@@ -309,7 +309,7 @@ Mechanical steps it performs:
 
 1. `gh issue view <issueUrl> --json body` → extract `<!-- thk-assets-ref -->` and `<!-- thk-runner-profile -->` markers
 2. `git -C <targetRepo> fetch origin <assetsRef>:<assetsRef>` to pull the orphan ref
-3. Mint a new session ID (`<ts>_<ticketCode>_revisit-<round>` by convention) at `<targetRepo>/.claude/.thk/sessions/<id>/`
+3. Mint a new session ID (`<ts>_<ticketCode>_revisit-<round>` by convention) at `<targetRepo>/.thk/sessions/<id>/`
 4. `git worktree add <sessionRoot>/assets-worktree <assetsRef>` and copy `session-log.md`, `session-progress.md`, `session-runtime-profile.json`, and `context/` into `<sessionRoot>/`
 5. Read `runtime-profile.json` for `prUrl` and the head branch
 6. `git fetch origin <headBranch>` → `git worktree add <sessionRoot>/worktree origin/<headBranch>`

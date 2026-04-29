@@ -19,7 +19,7 @@ Invoke the `capture-planetscale` sub-skill via `Skill` when, during any of your 
 - A data-dependent symptom the code alone cannot explain — "this user can't log in", "X records are missing", "field Y shows the wrong value".
 - A plan whose correctness depends on an assumption about row state (e.g. "this column is always non-null") that only the DB can verify.
 
-Skip it when the ticket is purely a render / layout / logic bug with no specific row in play. Fishing expeditions are rejected at the sub-skill's safety gate anyway (read-only, single-statement SELECT, row-limited, credential columns auto-redacted, plus any project-specific table bans declared in the target repo's `AGENTS.md` / `.claude/.thk/policies.json`).
+Skip it when the ticket is purely a render / layout / logic bug with no specific row in play. Fishing expeditions are rejected at the sub-skill's safety gate anyway (read-only, single-statement SELECT, row-limited, credential columns auto-redacted, plus any project-specific table bans declared in the target repo's `AGENTS.md` / `.thk/policies.json`).
 
 Every DB consult you run lands at `<contextDir>/planetscale/<queryName>.md`. Reference it from your review output so downstream readers see the evidence.
 
@@ -44,7 +44,7 @@ Every DB consult you run lands at `<contextDir>/planetscale/<queryName>.md`. Ref
 
 ## Project-specific instructions
 
-Before dispatching, check `<workdir>/.claude/.thk/agents/grand-maester.md`. The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — DB conventions specific to the repo, historical incidents to ground new work against, schema sensitivities, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
+Before dispatching, check `<workdir>/.thk/agents/grand-maester.md`. The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — DB conventions specific to the repo, historical incidents to ground new work against, schema sensitivities, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
 
 If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log a dispatch-detail line noting the read whenever real guidance was applied (`read: project-instructions agents/grand-maester.md (<N> bytes guidance)`).
 

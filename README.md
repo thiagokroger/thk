@@ -45,9 +45,9 @@ The script:
    - **Profile** — which model runs each council role (`claude_codex` is the default).
    - **Ticket source MCP** — Linear today; Jira and others slot in later via sibling `capture-<source>` skills.
    - **Optional capture MCPs** — Jam, Figma, PlanetScale, Notion.
-4. Writes `<repo>/.claude/.thk/config.json` with the choices.
-5. Checks `<repo>/.gitignore` for `.claude/.thk/`; if missing, prompts to add it (recommended, with a skip option). The committed entry keeps sessions, secret keys, and runtime state out of git for everyone on the team. If you skipped Jam in step 3, the gitignore step is purely about session folders.
-6. If you enabled Jam capture, optionally prompts for a Jam personal access token (used by `capture-jam` to download videos and ffmpeg-extract frames at transcript timestamps). Stored at `<repo>/.claude/.thk/keys/jam.key` with `chmod 600` inside a `chmod 700` `keys/` dir. Skip-friendly — frame extraction degrades gracefully without it. Future per-source secrets (Linear, GitHub, …) follow the same `<repo>/.claude/.thk/keys/<source>.key` convention.
+4. Writes `<repo>/.thk/config.json` with the choices.
+5. Checks `<repo>/.gitignore` for the thk block; if missing, prompts to add it (recommended, with a skip option). The block ignores `.thk/sessions/`, `.thk/keys/`, and `.thk/config.json` (transient, secrets, per-developer config) while leaving `.thk/policies.json` and `.thk/agents/*.md` untouched so they commit with the team. If you skipped Jam in step 3, the keys/ rule still applies for any future per-source secrets.
+6. If you enabled Jam capture, optionally prompts for a Jam personal access token (used by `capture-jam` to download videos and ffmpeg-extract frames at transcript timestamps). Stored at `<repo>/.thk/keys/jam.key` with `chmod 600` inside a `chmod 700` `keys/` dir. Skip-friendly — frame extraction degrades gracefully without it. Future per-source secrets (Linear, GitHub, …) follow the same `<repo>/.thk/keys/<source>.key` convention.
 7. Prints the two `/plugin marketplace add` + `/plugin install` lines you need to paste into a Claude Code session, plus a reminder of which MCP servers your Claude Code MCP config needs to expose.
 
 Re-run the script any time to change the profile / source / captures — it prompts before overwriting an existing config.
@@ -65,7 +65,7 @@ Skip the script and paste these straight into a Claude Code session:
 
 `/plugin marketplace add` clones the repo via `gh`'s git credentials, reads `.claude-plugin/marketplace.json`, and registers the `thiago-tools` marketplace. `/plugin install thk@thiago-tools` then installs the `thk` plugin from that marketplace into your local Claude Code plugins cache (the `@` reads as "from"; `<plugin-name>@<marketplace-name>`). If the first command fails with an auth error, run `gh auth status`.
 
-You'll then need to write `<repo>/.claude/.thk/config.json` by hand — see the schema below.
+You'll then need to write `<repo>/.thk/config.json` by hand — see the schema below.
 
 Installs are per-user, per machine.
 
@@ -89,7 +89,7 @@ Net effect: thk **never** creates a duplicate GH issue or branch for the same ti
 
 ## Configuration — target repo
 
-thk is **per-project** — every piece of state, config, and policy lives at `<targetRepo>/.claude/.thk/`. No home-dir files. The target repo is resolved per call:
+thk is **per-project** — every piece of state, config, and policy lives at `<targetRepo>/.thk/`. No home-dir files. The target repo is resolved per call:
 
 1. `$THK_TARGET_REPO` environment variable — absolute path
 2. Fallback: `$PWD`
@@ -131,9 +131,9 @@ Profile selection order is:
 3. `default_profile` from config
 4. Resolver recommendation based on local CLI/config signals
 
-Config files are merged from `${CLAUDE_PLUGIN_ROOT}/config/profiles.json` (built-in), `$THK_CONFIG` (explicit override), and `<targetRepo>/.claude/.thk/config.json` (per-project). The resolver detects installed commands and auth hints, but it does not claim to verify paid subscriptions. **No home-dir state by design** — every project's resolved profile is reproducible from files committed in that project.
+Config files are merged from `${CLAUDE_PLUGIN_ROOT}/config/profiles.json` (built-in), `$THK_CONFIG` (explicit override), and `<targetRepo>/.thk/config.json` (per-project). The resolver detects installed commands and auth hints, but it does not claim to verify paid subscriptions. **No home-dir state by design** — every project's resolved profile is reproducible from files committed in that project.
 
-### Schema — `<repo>/.claude/.thk/config.json`
+### Schema — `<repo>/.thk/config.json`
 
 The repo-local config is what `install.sh` writes; you can also hand-edit it. Every key is optional except `version`.
 
@@ -163,9 +163,9 @@ The repo-local config is what `install.sh` writes; you can also hand-edit it. Ev
 
 `config.json` is **per-developer** (profile preferences, machine-specific). It's gitignored.
 
-### Schema — `<repo>/.claude/.thk/policies.json` (team-shared)
+### Schema — `<repo>/.thk/policies.json` (team-shared)
 
-Project-specific safety + workflow rules that thk consults at runtime. **This file is committed** — `install.sh` and `_scaffold-session` set up the gitignore so `.claude/.thk/policies.json` is excepted from the broad `.claude/.thk/` exclude.
+Project-specific safety + workflow rules that thk consults at runtime. **This file is committed** — `install.sh` and `_scaffold-session` write a denylist-style gitignore (only `.thk/sessions/`, `.thk/keys/`, `.thk/config.json` are ignored), so `.thk/policies.json` commits naturally without any negation pattern.
 
 ```json
 {
@@ -199,12 +199,12 @@ Project-specific safety + workflow rules that thk consults at runtime. **This fi
 
 **Auto-bootstrap behavior.** Skills that consult policies follow the same rule: if the relevant key is missing from `policies.json`, infer or extract it (from `package.json` for verification, from `AGENTS.md` for planetscale bans), persist the result, then proceed. Hand-edited values are never overwritten — only missing keys get filled. Subsequent runs read the file verbatim.
 
-### Per-agent project instructions — `<repo>/.claude/.thk/agents/<member>.md` (team-shared)
+### Per-agent project instructions — `<repo>/.thk/agents/<member>.md` (team-shared)
 
 Each council member has its own markdown file where the team can drop **project-specific guidance** that runs alongside the agent's built-in defaults. On first session-scaffold thk creates seven placeholder files — one per council member — each containing a single HTML comment that explains what kind of guidance fits there. The agent treats a comment-only file as "no project instructions yet" and proceeds normally; once you write real guidance below the comment, every dispatch picks it up.
 
 ```
-<repo>/.claude/.thk/agents/
+<repo>/.thk/agents/
 ├── master-of-whisperers.md   # capture conventions, side-channel sources
 ├── master-of-ships.md        # branch naming, PR-body sections, mention shape
 ├── grand-maester.md          # DB conventions, historical incidents, schema sensitivities
@@ -214,7 +214,7 @@ Each council member has its own markdown file where the team can drop **project-
 └── counselor.md              # review brevity preferences, repo patterns to scrutinize (shared with counselor-altman)
 ```
 
-These files are **committed and team-shared** (gitignore exception). Edit freely; thk never overwrites them. The agents read the files at the start of every dispatch and forward any non-comment content to the dispatched skill under `projectInstructions:` so the guidance lands wherever it can affect behavior.
+These files are **committed and team-shared**. The gitignore block ignores only transient and per-developer pieces (`sessions/`, `keys/`, `config.json`), so `agents/*.md` commit with no special negation rule. Edit freely; thk never overwrites them. The agents read the files at the start of every dispatch and forward any non-comment content to the dispatched skill under `projectInstructions:` so the guidance lands wherever it can affect behavior.
 
 ## Updating
 
@@ -236,10 +236,10 @@ It `git fetch`es origin inside your local `~/.claude/plugins/marketplaces/thiago
 
 ## Session state
 
-Sessions live inside your target repo at `.claude/.thk/sessions/<YYYY-MM-DD_HHMMSS>_<ticket-slug>/`:
+Sessions live inside your target repo at `.thk/sessions/<YYYY-MM-DD_HHMMSS>_<ticket-slug>/`:
 
 ```
-<target-repo>/.claude/.thk/sessions/<session-id>/
+<target-repo>/.thk/sessions/<session-id>/
 ├── progress.md                  ← step tracker (resumption contract)
 ├── runtime-profile.json         ← selected profile snapshot
 ├── log.md                       ← append-only trace of every agent / skill / decision
@@ -262,7 +262,7 @@ Sessions live inside your target repo at `.claude/.thk/sessions/<YYYY-MM-DD_HHMM
     └── outcome.md               ← only present when the run ends on a blocking outcome
 ```
 
-`install.sh` adds `.claude/.thk/` to the target repo's `.gitignore` (with explicit consent during setup) so sessions, secret keys (`.claude/.thk/keys/`), and runtime state stay out of `git status` for everyone on the team. The full `context/` folder is bundled into a commit under `.github/thk-assets/<session-id>/context/` and pushed to `refs/thk/<TICKET-CODE>` — a custom ref that lives outside branches and tags (invisible in the branch picker and tags tab, preserved forever). Every link in the issue body is a full `https://github.com/<owner>/<repo>/blob/<commit-sha>/...` URL so they resolve regardless of branch lifecycle.
+`install.sh` adds the thk block to the target repo's `.gitignore` (with explicit consent during setup) — `.thk/sessions/`, `.thk/keys/`, `.thk/config.json` are ignored; `.thk/policies.json` and `.thk/agents/*.md` commit with the team. The full `context/` folder is bundled into a commit under `.github/thk-assets/<session-id>/context/` and pushed to `refs/thk/<TICKET-CODE>` — a custom ref that lives outside branches and tags (invisible in the branch picker and tags tab, preserved forever). Every link in the issue body is a full `https://github.com/<owner>/<repo>/blob/<commit-sha>/...` URL so they resolve regardless of branch lifecycle.
 
 ### Browsing bundled assets locally
 

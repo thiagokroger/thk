@@ -57,7 +57,7 @@ For each file in the plan:
 |---|---|
 | `auth-surface` | Path matches `auth/`, `session/`, `permission`, `oauth`, `passport`, `jwt`, `cookie`, `csrf`, `acl`, `rbac` |
 | `payment-surface` | Path matches `billing`, `payment`, `stripe`, `checkout`, `subscription`, `invoice`, `dunning` |
-| `pii-surface` | Path matches `users`, `profile`, `address`, `phone`, `ssn`, or imports a known PII column accessor (consult `<workdir>/.claude/.thk/policies.json:lord_commander.sensitive_paths` if defined) |
+| `pii-surface` | Path matches `users`, `profile`, `address`, `phone`, `ssn`, or imports a known PII column accessor (consult `<workdir>/.thk/policies.json:lord_commander.sensitive_paths` if defined) |
 | `schema-change` | Path matches `migrations/`, `schema.sql`, `schema.prisma`, `models/`, `*.gen.ts` for ORM-generated types, or extension `.sql` |
 | `dependency-change` | Path matches `package.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lockb`, `Cargo.toml`, `go.mod`, `requirements.txt`, `Gemfile`, `composer.json` |
 | `multi-file-scope` | More than 5 files in the plan |
@@ -65,7 +65,7 @@ For each file in the plan:
 | `infra-config` | Path matches `Dockerfile`, `*.yml` under `.github/workflows/`, `terraform/`, `k8s/`, `nginx`, `infra/` |
 | `unverified-tests` | Plan's Tests section is empty AND `weight_signals` already non-empty |
 
-The team can extend the patterns by writing them to `<workdir>/.claude/.thk/policies.json:review.weight_signals` (override / extend the defaults).
+The team can extend the patterns by writing them to `<workdir>/.thk/policies.json:review.weight_signals` (override / extend the defaults).
 
 ### 3. Read git history on the affected files
 

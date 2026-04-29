@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap the `review` block of <targetRepo>/.claude/.thk/policies.json
+# Bootstrap the `review` block of <targetRepo>/.thk/policies.json
 # with thk's defaults if missing. Never overwrites existing values — only
 # fills the gaps.
 #
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 target_repo="${1:?targetRepo required}"
-policies_dir="$target_repo/.claude/.thk"
+policies_dir="$target_repo/.thk"
 policies="$policies_dir/policies.json"
 
 mkdir -p "$policies_dir"

@@ -50,7 +50,7 @@ On any failure, return `{ error: "<reason>" }`.
 
 ### 2. Derive session-id
 
-Same rule as `publish-plan-to-github`: second-to-last segment of `<contextDir>` (e.g. `<targetRepo>/.claude/.thk/sessions/<session-id>/context` → `<session-id>`). Fall back to a slug if the path doesn't match that shape.
+Same rule as `publish-plan-to-github`: second-to-last segment of `<contextDir>` (e.g. `<targetRepo>/.thk/sessions/<session-id>/context` → `<session-id>`). Fall back to a slug if the path doesn't match that shape.
 
 ### 3. Sync the assets worktree with origin's ref tip
 

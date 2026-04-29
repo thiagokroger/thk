@@ -9,7 +9,7 @@ description: Create the session folder layout at an absolute path — `<sessionP
 ```
 {
   sessionId:   "<YYYY-MM-DD_HHMMSS_slug>",
-  sessionPath: "<abs — e.g. <targetRepo>/.claude/.thk/sessions/<sessionId>>",
+  sessionPath: "<abs — e.g. <targetRepo>/.thk/sessions/<sessionId>>",
   targetRepo:  "<abs — the product repo to worktree from>",
   baseBranch:  "<base branch in targetRepo>",
   branchName:  "<new branch to create>",
@@ -18,34 +18,35 @@ description: Create the session folder layout at an absolute path — `<sessionP
 }
 ```
 
-All four paths are absolute. The session lives under `<targetRepo>/.claude/.thk/sessions/<sessionId>` — **inside** the target repo. Most of `.claude/.thk/` must be excluded by git so session folders, secrets, and per-developer config don't show up in `git status`. **Two paths are exceptions and SHOULD be committed:**
+All four paths are absolute. The session lives under `<targetRepo>/.thk/sessions/<sessionId>` — **inside** the target repo. The `.thk/` folder is **not** wholly gitignored; only its transient and per-developer pieces are. The team-shared bits commit naturally:
 
-- `<targetRepo>/.claude/.thk/policies.json` — team-shared rules (banned tables, verification commands, revisit policy).
-- `<targetRepo>/.claude/.thk/agents/*.md` — per-agent project instructions. One file per council member — placeholders are bootstrapped here on first run; the team fills them in over time with project-specific guidance.
+- `<targetRepo>/.thk/policies.json` — team-shared rules (banned tables, verification commands, revisit policy). Committed.
+- `<targetRepo>/.thk/agents/*.md` — per-agent project instructions, one file per council member. Bootstrapped on first run, then hand-edited over time. Committed.
+- `<targetRepo>/.thk/sessions/` — transient per-session state. **Gitignored.**
+- `<targetRepo>/.thk/keys/` — secrets (Jam token, future per-source keys). **Gitignored.**
+- `<targetRepo>/.thk/config.json` — per-developer profile choices. **Gitignored.**
 
 `install.sh` writes the right lines on guided setup. For users who installed via the Claude Code marketplace and never ran the script, this skill is the backstop — it auto-adds the exclude block on first run.
 
 ## Procedure
 
 ```bash
-# Ensure .claude/.thk/ is gitignored EXCEPT the team-shared bits:
-#  - policies.json
-#  - agents/<member>.md (per-agent project instructions)
-#
-# The marketplace install path skips install.sh entirely, so this skill is
-# the second line of defense. Pattern uses `.claude/.thk/*` (with star) so
-# the directory itself stays includable — that's the only form where `!`
-# negations on contents actually work; without the star, git treats the
-# whole directory as excluded and refuses to re-include children.
-GITIGNORE_MARKER='# thk session state — .claude/.thk/ is per-developer except policies.json + agents/*.md (team-shared)'
+# Gitignore only the transient + per-developer pieces of .thk/. Team-shared
+# pieces (policies.json, agents/*.md) commit naturally because their parent
+# isn't ignored. This explicit-denylist shape replaces an earlier star-and-
+# negation pattern that was clean in theory but broke `--dangerously-skip-
+# permissions` once thk lived under .claude/ — Claude Code special-cases
+# everything in .claude/ as "settings", and asks for permission on every
+# write. Keeping .thk/ outside .claude/ avoids that footgun entirely.
+GITIGNORE_MARKER='# thk per-project state — sessions/keys/config.json are gitignored; policies.json + agents/*.md commit'
 if grep -qxF "$GITIGNORE_MARKER" <targetRepo>/.gitignore 2>/dev/null; then
   : # already added by us (or install.sh) — no-op
-elif grep -qxF '.claude/.thk/' <targetRepo>/.git/info/exclude 2>/dev/null \
-     && ! grep -qxF '.claude/.thk/' <targetRepo>/.gitignore 2>/dev/null; then
+elif grep -qxF '.thk/sessions/' <targetRepo>/.git/info/exclude 2>/dev/null \
+     && ! grep -qxF '.thk/sessions/' <targetRepo>/.gitignore 2>/dev/null; then
   : # User opted into the repo-local exclude list explicitly. Respect that
-    # signal — but note: policies.json + agents/*.md won't be committable
-    # that way unless the user adds exceptions themselves. Log a tip.
-  echo "scaffold-session: '.claude/.thk/' is in .git/info/exclude (per-developer ignore). To share thk policies + per-agent instructions with the team, move the exclude to .gitignore — this skill will rewrite it on next run if you remove the .git/info/exclude line." >&2
+    # signal but log a tip — secrets and per-dev config won't be ignored
+    # that way unless the user adds those rules themselves.
+  echo "scaffold-session: '.thk/sessions/' is in .git/info/exclude (per-developer ignore). For team-wide gitignore (recommended — also ignores .thk/keys/ and .thk/config.json), remove that line and rerun thk." >&2
 else
   # If .gitignore exists and lacks a trailing newline, add one before the block
   if [ -f <targetRepo>/.gitignore ] && [ -s <targetRepo>/.gitignore ] \
@@ -53,13 +54,12 @@ else
     printf "\n" >> <targetRepo>/.gitignore
   fi
   cat >> <targetRepo>/.gitignore <<'IGNORE'
-# thk session state — .claude/.thk/ is per-developer except policies.json + agents/*.md (team-shared)
-.claude/.thk/*
-!.claude/.thk/policies.json
-!.claude/.thk/agents/
-!.claude/.thk/agents/*.md
+# thk per-project state — sessions/keys/config.json are gitignored; policies.json + agents/*.md commit
+.thk/sessions/
+.thk/keys/
+.thk/config.json
 IGNORE
-  echo "scaffold-session: added '.claude/.thk/' exclude block (with policies.json + agents/*.md exceptions) to <targetRepo>/.gitignore." >&2
+  echo "scaffold-session: added thk gitignore block (.thk/sessions/, .thk/keys/, .thk/config.json) to <targetRepo>/.gitignore." >&2
 fi
 
 # Bootstrap per-agent project-instruction placeholders. Idempotent — never
@@ -67,9 +67,9 @@ fi
 # Each placeholder is a single HTML comment explaining what kind of guidance
 # fits; agents treat a comment-only file as "no project instructions yet" and
 # fall through to their built-in defaults.
-mkdir -p <targetRepo>/.claude/.thk/agents
+mkdir -p <targetRepo>/.thk/agents
 for member in master-of-whisperers master-of-ships grand-maester master-of-laws lord-commander master-of-coin counselor; do
-  target="<targetRepo>/.claude/.thk/agents/${member}.md"
+  target="<targetRepo>/.thk/agents/${member}.md"
   [ -f "$target" ] && continue
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/write-agent-placeholder.sh" "$member" "$target"
 done
@@ -104,11 +104,11 @@ Detection:
 - `package-lock.json` present → `npm ci`
 - `bun.lockb` present → `bun install --frozen-lockfile`
 - only `package.json`, no lockfile → `npm install`
-- no `package.json` at all → skip the install step (the project doesn't have JS-shaped deps; declare a custom command in `<workdir>/.claude/.thk/policies.json` under `verification.install` if a different install step is needed)
+- no `package.json` at all → skip the install step (the project doesn't have JS-shaped deps; declare a custom command in `<workdir>/.thk/policies.json` under `verification.install` if a different install step is needed)
 
-If `<targetRepo>/.claude/.thk/policies.json` declares `verification.install`, that wins over the inference here too — same source-of-truth as the verification gauntlet.
+If `<targetRepo>/.thk/policies.json` declares `verification.install`, that wins over the inference here too — same source-of-truth as the verification gauntlet.
 
-Note: `git worktree add` accepts an absolute path, so the worktree lives under `<sessionPath>/` (inside `<targetRepo>/.claude/.thk/sessions/<sessionId>/worktree/`) while still being a valid checkout of `<targetRepo>`. Commits made there push to `<targetRepo>`'s origin. The `.gitignore` entry on `.claude/.thk/` keeps it from showing as untracked in the main checkout's `git status`.
+Note: `git worktree add` accepts an absolute path, so the worktree lives under `<sessionPath>/` (inside `<targetRepo>/.thk/sessions/<sessionId>/worktree/`) while still being a valid checkout of `<targetRepo>`. Commits made there push to `<targetRepo>`'s origin. The `.gitignore` entry on `.thk/` keeps it from showing as untracked in the main checkout's `git status`.
 
 ### Assets worktree on a custom ref
 

@@ -28,7 +28,7 @@ What *is* pluggable, inside the Claude Code host:
 
 The Hand itself is not agnostic and isn't trying to be.
 
-**Runtime paths:** once the plugin is installed, Claude Code auto-discovers `skills/` and `agents/` at the plugin root. The plugin's on-disk location is exposed to every skill/agent through the `${CLAUDE_PLUGIN_ROOT}` environment variable — that's the only path any internal script should reference. Session state lives separately, under `<targetRepo>/.claude/.thk/sessions/`. Each session also persists the resolved runtime profile at `runtime-profile.json` so a resumed run does not silently change model assignments.
+**Runtime paths:** once the plugin is installed, Claude Code auto-discovers `skills/` and `agents/` at the plugin root. The plugin's on-disk location is exposed to every skill/agent through the `${CLAUDE_PLUGIN_ROOT}` environment variable — that's the only path any internal script should reference. Session state lives separately, under `<targetRepo>/.thk/sessions/`. Each session also persists the resolved runtime profile at `runtime-profile.json` so a resumed run does not silently change model assignments.
 
 ## The metaphor
 
@@ -100,10 +100,10 @@ Full state machine lives in `SKILL.md` at the package root.
 
 ## Sessions
 
-Every task opens a **session folder** at `<targetRepo>/.claude/.thk/sessions/<YYYY-MM-DD_HHMMSS>_<slug>/`:
+Every task opens a **session folder** at `<targetRepo>/.thk/sessions/<YYYY-MM-DD_HHMMSS>_<slug>/`:
 
 ```
-<targetRepo>/.claude/.thk/sessions/2026-04-22_143000_eng-10105/
+<targetRepo>/.thk/sessions/2026-04-22_143000_eng-10105/
 ├── worktree/         ← code worktree on the session branch (becomes the PR)
 ├── assets-worktree/  ← orphan worktree backing refs/thk/<TICKET-CODE> (bundle commits)
 └── context/          ← shared dossier — every agent reads from here
@@ -112,7 +112,7 @@ Every task opens a **session folder** at `<targetRepo>/.claude/.thk/sessions/<YY
 `context/` is a stable, CLI-agnostic contract. Master of Whisperers organizes captured intelligence into per-MCP subfolders. The living plan lives at `context/plan.md`. The council's deliberation output lives under `context/plan-reviews/`, split into three rounds: Round 1 (four profiled member reviews), Round 2 (Counselor oversight), and Round 3 (the Hand's synthesis — `hand-decision.md`, one section per review round). Other synthesized artifacts (root-cause analysis, review brief) live at the root of `context/`. An index at `context/README.md` (written by `scaffold-session`) explains the folder to downstream agents.
 
 ```
-<targetRepo>/.claude/.thk/sessions/<session-id>/
+<targetRepo>/.thk/sessions/<session-id>/
 ├── progress.md              ← step tracker (resumption contract)
 ├── runtime-profile.json     ← selected profile snapshot for deterministic resume
 ├── worktree/                ← code worktree on the session branch
@@ -235,7 +235,7 @@ Every council member is a thin **action-dispatcher**. When a role uses `claude-c
 
 Adding capability = add a skill + list it in the relevant agent's action table. Adding a new external **URL-driven** source (Notion links, GitHub URLs, another URL-addressed archive, …) = add a `capture-*` skill and give it to Whisperers. Adding a new **judgment-driven** source (something where the decision to fetch is based on reasoning, not pattern matching) = give the skill to the council member whose role covers that reasoning — the way PlanetScale is the Grand Maester's.
 
-**Database captures are judgment-driven, not URL-driven.** Unlike Jam / Figma (discovered as links in the source ticket and fetched every time they appear), DB captures are the **Grand Maester's** call, made during his `convene-meeting` review when he recognizes that a ticket or plan hinges on a specific record's state — a named user, an order ID, a subscription, a session — and the code path alone can't answer whether it's a data issue or a logic issue. He invokes the `capture-planetscale` sub-skill via `Skill` with a narrow SELECT (targeted WHERE, minimal columns, explicit `LIMIT`, one-line `purpose`). The sub-skill enforces a universal read-only safety gate (single-statement SELECT, banned-keywords list, auto-`LIMIT 100` if absent) and auto-redacts credential-like columns (`password*`, `*_hash`, `token*`, `secret*`, etc.). **Project-specific table bans (e.g. HR / PII tables that are off-limits regardless of purpose) live in the target repo's `AGENTS.md` or `.claude/.thk/policies.json` — thk ships no hardcoded list, so the rule is whatever each project declares.** The Hand does not plan, request, or dispatch DB queries — ownership lives fully with the Grand Maester.
+**Database captures are judgment-driven, not URL-driven.** Unlike Jam / Figma (discovered as links in the source ticket and fetched every time they appear), DB captures are the **Grand Maester's** call, made during his `convene-meeting` review when he recognizes that a ticket or plan hinges on a specific record's state — a named user, an order ID, a subscription, a session — and the code path alone can't answer whether it's a data issue or a logic issue. He invokes the `capture-planetscale` sub-skill via `Skill` with a narrow SELECT (targeted WHERE, minimal columns, explicit `LIMIT`, one-line `purpose`). The sub-skill enforces a universal read-only safety gate (single-statement SELECT, banned-keywords list, auto-`LIMIT 100` if absent) and auto-redacts credential-like columns (`password*`, `*_hash`, `token*`, `secret*`, etc.). **Project-specific table bans (e.g. HR / PII tables that are off-limits regardless of purpose) live in the target repo's `AGENTS.md` or `.thk/policies.json` — thk ships no hardcoded list, so the rule is whatever each project declares.** The Hand does not plan, request, or dispatch DB queries — ownership lives fully with the Grand Maester.
 
 ### Parallelism via swarms
 
@@ -250,14 +250,14 @@ This is how the default flow gets real parallelism without needing sub-sub-agent
 
 **Repo hygiene:**
 - `${CLAUDE_PLUGIN_ROOT}/` → committed (shared team config)
-- `<targetRepo>/.claude/.thk/sessions/` → gitignored (per-developer, ephemeral, contains secrets and worktrees)
+- `<targetRepo>/.thk/sessions/` → gitignored (per-developer, ephemeral, contains secrets and worktrees)
 
 ## Delegation contract
 
 Every dispatch from the Hand to a council member passes:
 
 - `workdir` — absolute path to the session's worktree
-- `contextDir` — absolute path to `<targetRepo>/.claude/.thk/sessions/<session-id>/context/`
+- `contextDir` — absolute path to `<targetRepo>/.thk/sessions/<session-id>/context/`
 - Mode-specific inputs (see each agent's file)
 
 Every member returns a short structured verdict:
@@ -274,7 +274,7 @@ The Hand does not need raw external-runner transcripts, raw Jam video transcript
 
 1. `${CLAUDE_PLUGIN_ROOT}/config/profiles.json` (built-in defaults)
 2. `$THK_CONFIG`, if set (explicit override — typically per-shell or per-CI-run)
-3. `<targetRepo>/.claude/.thk/config.json` (committed per-project)
+3. `<targetRepo>/.thk/config.json` (committed per-project)
 
 thk is per-project — there's no home-dir state. A teammate's machine resolves the same profile from the same files because they live in the repo.
 
@@ -297,17 +297,17 @@ Adding a new **council member** (a new office) is a larger architectural change 
 
 ## Per-agent project instructions
 
-Each council member has a markdown file at `<repo>/.claude/.thk/agents/<member>.md` where the team can drop project-specific guidance. `_scaffold-session` bootstraps seven placeholder files on first run — one per member, each containing a single HTML comment explaining what kind of guidance fits there. Agents read their file at the start of every dispatch and forward any non-comment content to the dispatched skill under `projectInstructions:` so the guidance reaches the layer that can act on it.
+Each council member has a markdown file at `<repo>/.thk/agents/<member>.md` where the team can drop project-specific guidance. `_scaffold-session` bootstraps seven placeholder files on first run — one per member, each containing a single HTML comment explaining what kind of guidance fits there. Agents read their file at the start of every dispatch and forward any non-comment content to the dispatched skill under `projectInstructions:` so the guidance reaches the layer that can act on it.
 
 The mechanism is a per-repo extension surface that complements the global agent definitions in `agents/*.md` (the plugin's defaults) and `policies.json` (structured rules). Three escape hatches with three audiences:
 
 - `agents/*.md` (this repo) — defaults applied to every project, edited by thk maintainers.
-- `<repo>/.claude/.thk/policies.json` — structured rules (banned tables, verification commands, revisit thresholds), edited by repo teams.
-- `<repo>/.claude/.thk/agents/<member>.md` — freeform per-agent prose, edited by repo teams.
+- `<repo>/.thk/policies.json` — structured rules (banned tables, verification commands, revisit thresholds), edited by repo teams.
+- `<repo>/.thk/agents/<member>.md` — freeform per-agent prose, edited by repo teams.
 
 `policies.json` is for facts the agent must enforce verbatim; the per-agent markdown file is for nuance, conventions, and judgment calls that don't fit a structured schema. Agents apply both alongside their built-in defaults.
 
-The placeholder files are team-shared (gitignore exception) — `_scaffold-session` adds the appropriate `!.claude/.thk/agents/*.md` rule to `<repo>/.gitignore` so they're committable. Agents never overwrite a user-edited file; the bootstrap is one-time per fresh session-scaffold.
+The placeholder files are team-shared. `_scaffold-session` writes a denylist-style `.gitignore` block (`.thk/sessions/`, `.thk/keys/`, `.thk/config.json`) so the transient and per-developer pieces stay out of git while `policies.json` and `agents/*.md` commit naturally — no negation patterns required. Agents never overwrite a user-edited file; the bootstrap is one-time per fresh session-scaffold.
 
 ## Running thk from a different repo
 
@@ -320,11 +320,11 @@ For the repo location itself: when Claude Code is launched from one directory bu
 
 There's no home-dir workspace pointer by design — thk is per-project. Either launch Claude Code from inside the target repo (`$PWD` resolution) or set `THK_TARGET_REPO` for the session.
 
-The resolved `targetRepo` is passed as `workdir` to every dispatch. It is also passed to `resolve-profile.mjs` so the repo-local profile config at `<targetRepo>/.claude/.thk/config.json` participates in resolution. See SKILL.md § Workspace and profile resolution for the definitive spec.
+The resolved `targetRepo` is passed as `workdir` to every dispatch. It is also passed to `resolve-profile.mjs` so the repo-local profile config at `<targetRepo>/.thk/config.json` participates in resolution. See SKILL.md § Workspace and profile resolution for the definitive spec.
 
 ## Logging
 
-Every session keeps an **append-only log** at `<targetRepo>/.claude/.thk/sessions/<session-id>/log.md`. The Hand and every council member append entries per meaningful interaction — `step-start`, `step-done`, `dispatch`, `skill-invoke`, `dispatch-detail`, `skill-return`, `decision`, `error`. When anything goes wrong, the log is the first place to look; at session end `publish-plan-to-github` / `update-github-issue` bundle `log.md` as `session-log.md` alongside the committed context, so the GitHub issue carries the full debug trail.
+Every session keeps an **append-only log** at `<targetRepo>/.thk/sessions/<session-id>/log.md`. The Hand and every council member append entries per meaningful interaction — `step-start`, `step-done`, `dispatch`, `skill-invoke`, `dispatch-detail`, `skill-return`, `decision`, `error`. When anything goes wrong, the log is the first place to look; at session end `publish-plan-to-github` / `update-github-issue` bundle `log.md` as `session-log.md` alongside the committed context, so the GitHub issue carries the full debug trail.
 
 The logger lives at `${CLAUDE_PLUGIN_ROOT}/scripts/log.sh`:
 

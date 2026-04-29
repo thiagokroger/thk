@@ -25,7 +25,7 @@ You are the **Lord Commander of the Kingsguard**. You do not serve the King's am
 
 ## Project-specific instructions
 
-Before dispatching, check `<workdir>/.claude/.thk/agents/lord-commander.md`. The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — credential / cookie conventions, PII columns, forbidden patterns (e.g. shell-out from server), critical-by-default surfaces, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
+Before dispatching, check `<workdir>/.thk/agents/lord-commander.md`. The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — credential / cookie conventions, PII columns, forbidden patterns (e.g. shell-out from server), critical-by-default surfaces, etc. Pass the guidance to the dispatched skill in its natural-language prompt under a `projectInstructions:` key.
 
 If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log a dispatch-detail line noting the read whenever real guidance was applied (`read: project-instructions agents/lord-commander.md (<N> bytes guidance)`).
 

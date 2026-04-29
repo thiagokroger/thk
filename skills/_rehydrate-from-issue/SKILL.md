@@ -1,6 +1,6 @@
 ---
 name: _rehydrate-from-issue
-description: Reconstruct a thk session folder from a published GitHub issue and the orphan asset commit it points to. Reads `<!-- thk-assets-ref -->` and `<!-- thk-runner-profile -->` markers from the issue body, fetches the asset ref, copies session-log.md / session-progress.md / session-runtime-profile.json / context/ into a new session folder under `<targetRepo>/.claude/.thk/sessions/<id>/`, and adds a worktree at the PR head branch. Used by `_revisit-pr` (cold-start path) and any other future re-entry that needs to pick up where a prior run left off without local state.
+description: Reconstruct a thk session folder from a published GitHub issue and the orphan asset commit it points to. Reads `<!-- thk-assets-ref -->` and `<!-- thk-runner-profile -->` markers from the issue body, fetches the asset ref, copies session-log.md / session-progress.md / session-runtime-profile.json / context/ into a new session folder under `<targetRepo>/.thk/sessions/<id>/`, and adds a worktree at the PR head branch. Used by `_revisit-pr` (cold-start path) and any other future re-entry that needs to pick up where a prior run left off without local state.
 ---
 
 # Rehydrate from Issue
@@ -25,7 +25,7 @@ Used by `_revisit-pr` when invoked on a fresh checkout, a different machine, or 
 {
   approved:       true,
   artifacts: {
-    sessionRoot:        "<abs — <targetRepo>/.claude/.thk/sessions/<reused-id>/>",
+    sessionRoot:        "<abs — <targetRepo>/.thk/sessions/<reused-id>/>",
     contextDir:         "<abs — <sessionRoot>/context/>",
     workdir:            "<abs — <sessionRoot>/worktree/ at PR head>",
     assetsRef:          "refs/thk/<TICKET-CODE>",
@@ -89,7 +89,7 @@ By convention, a revisit reuses the same session-id but appends a sub-segment so
 
 ```bash
 new_session_id="${session_id}-revisit-$(date -u +%Y%m%d_%H%M%S)"
-session_root="<targetRepo>/.claude/.thk/sessions/${new_session_id}"
+session_root="<targetRepo>/.thk/sessions/${new_session_id}"
 mkdir -p "${session_root}/context"
 ```
 

@@ -27,7 +27,7 @@ You are the **Counselor** — independent oversight for the Small Council. You a
 
 ## Project-specific instructions
 
-Before reviewing, check `<workdir>/.claude/.thk/agents/counselor.md`. The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — review brevity preferences, repo-specific patterns to scrutinize, styles the team has rejected, etc.
+Before reviewing, check `<workdir>/.thk/agents/counselor.md`. The file is bootstrapped on first session-scaffold with a placeholder HTML comment that explains its purpose; if it contains content **beyond** that comment, treat that content as **project-specific guidance from the team** to apply alongside this file's defaults — review brevity preferences, repo-specific patterns to scrutinize, styles the team has rejected, etc.
 
 If the file is missing or contains only the placeholder comment, proceed with built-in defaults. Log the read in dispatch-detail when real guidance was applied (`read: project-instructions agents/counselor.md (<N> bytes guidance)`).
 

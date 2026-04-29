@@ -10,8 +10,8 @@
 #   1. Verifies Claude Code is installed (Hand of the King is a Claude Code plugin).
 #   2. Detects optional advisor runners (Codex CLI, Gemini CLI).
 #   3. Asks which profile, ticket source MCP, and optional capture MCPs to use.
-#   4. Writes <targetRepo>/.claude/.thk/config.json so /thk uses the chosen profile + sources.
-#   5. Checks <targetRepo>/.gitignore for .claude/.thk/; if missing, prompts to add it (recommended).
+#   4. Writes <targetRepo>/.thk/config.json so /thk uses the chosen profile + sources.
+#   5. Checks <targetRepo>/.gitignore for .thk/; if missing, prompts to add it (recommended).
 #   6. Prints the /plugin marketplace add + /plugin install commands to paste into Claude Code.
 #
 # Idempotent — re-running prompts before overwriting an existing config.
@@ -192,10 +192,10 @@ if [ "$NON_INTERACTIVE" = 0 ]; then
   fi
 fi
 
-# --- Write <targetRepo>/.claude/.thk/config.json ---
-step "Writing $TARGET_REPO/.claude/.thk/config.json"
-mkdir -p "$TARGET_REPO/.claude/.thk"
-CONFIG_PATH="$TARGET_REPO/.claude/.thk/config.json"
+# --- Write <targetRepo>/.thk/config.json ---
+step "Writing $TARGET_REPO/.thk/config.json"
+mkdir -p "$TARGET_REPO/.thk"
+CONFIG_PATH="$TARGET_REPO/.thk/config.json"
 
 if [ -f "$CONFIG_PATH" ]; then
   warn "Config already exists at $CONFIG_PATH"
@@ -231,11 +231,11 @@ ok "wrote $CONFIG_PATH"
 # --- Optional Jam token for video-frame extraction ---
 # The Jam MCP itself works without this token. The token is only needed when
 # capture-jam wants to download the raw recording and ffmpeg-extract frames at
-# WebVTT cue timestamps. Lives under .claude/.thk/keys/ — a dedicated secrets dir kept
+# WebVTT cue timestamps. Lives under .thk/keys/ — a dedicated secrets dir kept
 # at chmod 700, so future tokens (linear, github, …) follow the same pattern.
 if [ "${#CAPTURES[@]}" -gt 0 ] && printf '%s\n' "${CAPTURES[@]}" | grep -qx jam; then
   step "Jam token (optional, only used for video-frame extraction)"
-  KEYS_DIR="$TARGET_REPO/.claude/.thk/keys"
+  KEYS_DIR="$TARGET_REPO/.thk/keys"
   TOKEN_FILE="$KEYS_DIR/jam.key"
   SKIP_TOKEN=0
 
@@ -285,17 +285,12 @@ if [ "${#CAPTURES[@]}" -gt 0 ] && printf '%s\n' "${CAPTURES[@]}" | grep -qx jam;
   fi
 fi
 
-# --- .gitignore check for .claude/.thk/ ---
-# Recommended (not forced). thk writes per-developer session folders, the
-# resolved runtime profile, and the optional keys/ secrets dir under .claude/.thk/.
-# Without the gitignore entry these show up in `git status` and risk being
-# committed.
-#
-# Special case: .claude/.thk/policies.json IS team-shared (banned tables, verification
-# commands) and SHOULD be committed. We add an exception for it.
+# --- .gitignore check for .thk/ ---
+# Recommended. Only the transient + per-developer pieces are ignored;
+# policies.json and agents/*.md (team-shared) commit naturally.
 step ".gitignore check"
 GITIGNORE="$TARGET_REPO/.gitignore"
-GITIGNORE_MARKER="# thk session state — .claude/.thk/ is per-developer except policies.json (team-shared)"
+GITIGNORE_MARKER="# thk per-project state — sessions/keys/config.json are gitignored; policies.json + agents/*.md commit"
 
 if [ -f "$GITIGNORE" ] && grep -qxF "$GITIGNORE_MARKER" "$GITIGNORE"; then
   ok ".gitignore already has the thk block"
@@ -305,7 +300,7 @@ else
   else
     info "no .gitignore at $TARGET_REPO"
   fi
-  info "$(dim "(recommended — keeps sessions / secrets / runtime state out of git, while preserving policies.json as team-shared)")"
+  info "$(dim "(recommended — keeps sessions / secrets / per-developer config out of git; policies.json + agents/*.md remain team-shared)")"
 
   # Default to yes. Non-interactive mode auto-adds (the recommended path).
   ADD_GITIGNORE=1
@@ -325,16 +320,18 @@ else
     fi
     cat >> "$GITIGNORE" <<EOF
 $GITIGNORE_MARKER
-.claude/.thk/
-!.claude/.thk/policies.json
+.thk/sessions/
+.thk/keys/
+.thk/config.json
 EOF
-    ok "added .claude/.thk/ (with !.claude/.thk/policies.json exception) to .gitignore"
+    ok "added thk gitignore block (.thk/sessions/, .thk/keys/, .thk/config.json) to .gitignore"
   else
-    warn "skipped — .claude/.thk/ will appear in 'git status'. Run:"
+    warn "skipped — .thk/sessions/, .thk/keys/, .thk/config.json will appear in 'git status'. Run:"
     warn "    cat >> .gitignore <<'EOF'"
     warn "    $GITIGNORE_MARKER"
-    warn "    .claude/.thk/"
-    warn "    !.claude/.thk/policies.json"
+    warn "    .thk/sessions/"
+    warn "    .thk/keys/"
+    warn "    .thk/config.json"
     warn "    EOF"
   fi
 fi

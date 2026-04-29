@@ -154,7 +154,7 @@ function detectMachine() {
 function defaultConfigPaths(args) {
   // thk is per-project. The only config sources are:
   //   1. $THK_CONFIG — explicit override (per-shell / CI)
-  //   2. <targetRepo>/.claude/.thk/config.json — committed alongside the project
+  //   2. <targetRepo>/.thk/config.json — committed alongside the project
   // No home-dir state. A teammate's machine resolves the same config from the
   // same files because they live in the repo.
   const paths = [];
@@ -293,7 +293,7 @@ Usage:
 Config resolution (per-project — no home-dir state):
   1. config/profiles.json in the plugin (built-in defaults)
   2. $THK_CONFIG, if set (explicit override)
-  3. <targetRepo>/.claude/.thk/config.json, when --target-repo is provided
+  3. <targetRepo>/.thk/config.json, when --target-repo is provided
 
 Profile selection:
   --profile wins, then $THK_PROFILE, then default_profile.

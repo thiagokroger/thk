@@ -5,7 +5,7 @@ description: The Hand executes the finalized plan — reads the spec from `<cont
 
 # Execute the Plan
 
-The plan in `<contextDir>/plan.md` is the spec. This skill turns it into a working tree diff that survives the project's verification gauntlet (whatever `_run-verification` infers from `package.json` + lockfile, or whatever overrides the project declares in `<workdir>/.claude/.thk/policies.json`). The Hand drives — single agent, single mental model, sequential edits.
+The plan in `<contextDir>/plan.md` is the spec. This skill turns it into a working tree diff that survives the project's verification gauntlet (whatever `_run-verification` infers from `package.json` + lockfile, or whatever overrides the project declares in `<workdir>/.thk/policies.json`). The Hand drives — single agent, single mental model, sequential edits.
 
 ## Inputs
 
@@ -77,7 +77,7 @@ Agent(master-of-laws, prompt="action: run-verification. workdir: <workdir>.")
   → returns { approved, issues?, notes }
 ```
 
-`run-verification` runs the project's install + type-check + build, with the exact commands inferred from the lockfile (`pnpm` / `yarn` / `npm` / `bun`) and `package.json` scripts — overridable via `<workdir>/.claude/.thk/policies.json`. Pre-existing type / build errors on the branch are acceptable; new ones introduced by the diff are blockers.
+`run-verification` runs the project's install + type-check + build, with the exact commands inferred from the lockfile (`pnpm` / `yarn` / `npm` / `bun`) and `package.json` scripts — overridable via `<workdir>/.thk/policies.json`. Pre-existing type / build errors on the branch are acceptable; new ones introduced by the diff are blockers.
 
 If `approved: true` → verification passed. Set `iterations`, `verificationOutcome: "green"`, return `success: true`.
 

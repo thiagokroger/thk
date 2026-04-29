@@ -58,7 +58,7 @@ On any failure, return `{ error: "<reason>" }`.
 
 ### 2. Derive session-id
 
-Extract from `<contextDir>`. The path is typically `<targetRepo>/.claude/.thk/sessions/<session-id>/context/`; take the second-to-last path segment as `session-id`. If the path doesn't match that shape, fall back to a timestamp-ticket slug.
+Extract from `<contextDir>`. The path is typically `<targetRepo>/.thk/sessions/<session-id>/context/`; take the second-to-last path segment as `session-id`. If the path doesn't match that shape, fall back to a timestamp-ticket slug.
 
 ### 3. Bundle the ENTIRE context folder into the assets worktree
 
