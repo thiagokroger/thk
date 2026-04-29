@@ -373,7 +373,17 @@ timestamps. Without it, the transcript is captured but `screenshots/` will be em
 which means downstream reviewers (and the published GitHub issue) won't see any
 visual evidence from the video.
 
-## How to fix
+## Fastest fix — one inline command
+
+In this Claude Code session, paste:
+
+```
+! bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup-jam-token.sh <targetRepo>
+```
+
+(The leading `!` runs the command in this CC session — the output lands in the conversation.) The script opens the Jam token page in your browser, prompts for the token (input hidden), writes it to `<targetRepo>/.thk/keys/jam.key` with the right perms, and tells you to re-run `/thk`.
+
+## Manual fix (alternatives)
 
 Generate a Jam personal access token at https://jam.dev/account/api-keys, then drop it
 in **one** of these places (first hit wins):
@@ -381,7 +391,7 @@ in **one** of these places (first hit wins):
 | Where | When to use |
 |-------|-------------|
 | `export JAM_TOKEN=<token>` (then re-launch Claude Code) | Per-session, ad-hoc |
-| `<targetRepo>/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here |
+| `<targetRepo>/.thk/keys/jam.key` (chmod 600 inside chmod 700 dir) | Per-repo — `install.sh` writes here, `setup-jam-token.sh` writes here |
 | `~/.jamtoken` (chmod 600) | User-global, all repos |
 
 Then re-invoke `/thk <same-ticket-url>` — this session resumes from Step 1c.5 and proceeds normally.
@@ -939,6 +949,7 @@ For terminal-failure outcomes (execution-failed, needs-more-info, etc.), the tim
 - For `pr-drafted` with revisit scheduled: "The Draft PR will receive review from CodeRabbit + your team. `/thk revisit <code>` fires automatically at <HH:MM>."
 - For `pr-drafted` with revisit disabled: "Run `/thk revisit <code>` later when reviewers have weighed in."
 - For `needs-more-info`: "Posted Linear @-mention to <assigner> with the missing context list. Re-run `/thk <linearTicketUrl>` once they've responded."
+- For `needs-jam-token`: "Paste this in the prompt to set up the Jam token in one step:" then a fenced block `! bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup-jam-token.sh <targetRepo>`. (Script opens the token page in the browser, reads the token interactively, writes it to `.thk/keys/jam.key`. Re-run `/thk <ticket>` after.)
 - For `already-fixed` / `already-shipped`: state the artifact pointers; no next step needed.
 - For `execution-failed` / `pre-pr-review-failed`: "Plan + bundled context live on GH issue <url>. Implementation is on the worktree at `<sessionPath>/worktree/`. The King decides whether to revise the plan or implement manually."
 ```
