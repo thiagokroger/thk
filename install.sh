@@ -40,27 +40,73 @@ ok()   { printf "  %s %s\n" "$(green "✓")" "$1"; }
 TARGET_REPO="${PWD}"
 NON_INTERACTIVE=0
 FORCE_PROFILE=""
+
+print_help() {
+  cat <<'HELP'
+thk install — bootstrap thk into Claude Code with chosen runners and sources.
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/thiagokroger/thk/main/install.sh | bash
+  ./install.sh [--target-repo PATH] [--non-interactive] [--profile NAME]
+
+What it does:
+  1. Verifies Claude Code is installed (Hand of the King is a Claude Code plugin).
+  2. Verifies `gh` CLI is installed; warns if not authenticated.
+  3. Detects optional advisor runners (Codex CLI, Gemini CLI).
+  4. Asks which profile, ticket source MCP, and optional capture MCPs to use.
+  5. Writes <targetRepo>/.thk/config.json so /thk uses the chosen profile + sources.
+  6. Checks <targetRepo>/.gitignore for the thk block; if missing, prompts to add it.
+  7. Prints the /plugin marketplace add + /plugin install commands to paste into Claude Code.
+
+Idempotent — re-running prompts before overwriting an existing config.
+HELP
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --target-repo)     TARGET_REPO="$2"; shift 2;;
     --non-interactive) NON_INTERACTIVE=1; shift;;
     --profile)         FORCE_PROFILE="$2"; shift 2;;
-    -h|--help)
-      sed -n '3,18p' "$0"
-      exit 0
-      ;;
+    -h|--help)         print_help; exit 0;;
     *) fail "unknown argument: $1";;
   esac
 done
+
+# --- TTY availability for interactive prompts ---
+# When the script is run via `curl … | bash`, stdin is the curl pipe — every
+# interactive `read` would hit EOF and the script would die at the first
+# prompt. Detect that and either route prompts to /dev/tty (the user's
+# controlling terminal) or, if no tty exists at all (CI, sandboxed runners),
+# force non-interactive defaults.
+#
+# `[ -r /dev/tty ]` tests file mode bits, not whether opening would succeed.
+# In sandboxed environments /dev/tty exists with the right mode but opening
+# it fails ("Device not configured"). The reliable check is to actually try
+# opening it for read and write.
+if (: </dev/tty) 2>/dev/null && (: >/dev/tty) 2>/dev/null; then
+  HAS_TTY=1
+else
+  HAS_TTY=0
+  if [ "$NON_INTERACTIVE" = 0 ]; then
+    NON_INTERACTIVE=1
+    NO_TTY_AUTO_FORCED=1
+  fi
+fi
 
 # --- Banner ---
 printf "\n%s\n"   "$(bold "thk install — Hand of the King")"
 printf "%s\n"     "$(dim  "ticket → plan → council → execute → Draft PR")"
 printf "%s\n\n"   "$(dim  "thk runs as a Claude Code plugin; this script wires it up.")"
 
+if [ "${NO_TTY_AUTO_FORCED:-0}" = 1 ]; then
+  printf "%s\n\n" "$(dim "(no controlling terminal — using non-interactive defaults: profile=claude_codex, all captures enabled.)")"
+fi
+
 # --- Target repo ---
 step "Target repo"
-if [ ! -d "$TARGET_REPO/.git" ]; then
+# `.git` is a directory in normal checkouts and a regular file in git worktrees
+# — `-e` (exists) accepts both, where `-d` would reject worktrees.
+if [ ! -e "$TARGET_REPO/.git" ]; then
   fail "$TARGET_REPO is not a git repo. Run from inside the target repo, or pass --target-repo PATH."
 fi
 ok "$TARGET_REPO"
@@ -78,6 +124,22 @@ if [ "$HAS_CLAUDE" = 0 ]; then
 fi
 ok "Claude Code detected"
 
+# --- Verify gh CLI (required for plan publish + PR open) ---
+step "Detecting gh CLI (required)"
+if ! command -v gh >/dev/null 2>&1; then
+  warn "gh CLI not detected on this machine."
+  info "thk uses gh to publish plans as GitHub issues and open Draft PRs."
+  info "Install: https://cli.github.com"
+  fail "gh CLI is required."
+fi
+if ! gh auth status >/dev/null 2>&1; then
+  warn "gh CLI is installed but not authenticated."
+  info "Run \`gh auth login\` (or \`gh auth setup-git\` if SSH-only) before invoking /thk."
+  info "(Continuing — install can finish, but the first /thk run will fail until you authenticate.)"
+else
+  ok "gh CLI authenticated"
+fi
+
 # --- Detect optional advisor runners ---
 step "Detecting optional advisor runners"
 HAS_CODEX=0
@@ -91,18 +153,23 @@ if command -v gum >/dev/null 2>&1; then
   USE_GUM=1
 fi
 
+# All interactive reads route through /dev/tty so the script works under
+# `curl … | bash` (where stdin is the script content, not a terminal). gum
+# already prefers /dev/tty when available, but we redirect explicitly for
+# the bash-builtin fallbacks (`select`, `read`).
+
 # Single-choice prompt. Prints the chosen string to stdout.
 choose_one() {
   local prompt="$1"; shift
   local options=("$@")
   if [ "$USE_GUM" = 1 ]; then
-    gum choose --header "$prompt" "${options[@]}"
+    gum choose --header "$prompt" "${options[@]}" </dev/tty
   else
     printf "\n%s\n" "$prompt" >&2
     PS3="> "
     select choice in "${options[@]}"; do
       [ -n "${choice:-}" ] && { echo "$choice"; break; }
-    done
+    done </dev/tty
   fi
 }
 
@@ -111,7 +178,7 @@ choose_many() {
   local prompt="$1"; shift
   local options=("$@")
   if [ "$USE_GUM" = 1 ]; then
-    gum choose --no-limit --header "$prompt" "${options[@]}" || true
+    gum choose --no-limit --header "$prompt" "${options[@]}" </dev/tty || true
   else
     printf "\n%s\n" "$prompt" >&2
     printf "%s\n" "$(dim "(comma-separated indices, blank for none)")" >&2
@@ -121,7 +188,7 @@ choose_many() {
       i=$((i+1))
     done
     local indices
-    read -r -p "> " indices
+    read -r -p "> " indices </dev/tty
     [ -z "$indices" ] && return 0
     IFS=',' read -ra parts <<< "$indices"
     for idx in "${parts[@]}"; do
@@ -134,11 +201,11 @@ choose_many() {
 confirm() {
   local prompt="$1"
   if [ "$USE_GUM" = 1 ]; then
-    gum confirm "$prompt"
+    gum confirm "$prompt" </dev/tty
     return $?
   else
     local reply
-    read -r -p "$prompt (y/N) " reply
+    read -r -p "$prompt (y/N) " reply </dev/tty
     [[ "$reply" =~ ^[Yy]$ ]]
   fi
 }
@@ -261,8 +328,9 @@ if [ "${#CAPTURES[@]}" -gt 0 ] && printf '%s\n' "${CAPTURES[@]}" | grep -qx jam;
       info "the skill degrades gracefully (framesAvailable: false)."
       if confirm "Paste a Jam token now?"; then
         printf "  token (input hidden): "
-        # -s hides input on bash/zsh; trailing newline added by us
-        read -rs JAM_TOKEN_INPUT || JAM_TOKEN_INPUT=""
+        # -s hides input on bash/zsh; trailing newline added by us.
+        # </dev/tty so curl|bash piping doesn't break the prompt.
+        read -rs JAM_TOKEN_INPUT </dev/tty || JAM_TOKEN_INPUT=""
         printf "\n"
         # Trim any whitespace/newlines the user may have pasted
         JAM_TOKEN_INPUT=$(printf "%s" "$JAM_TOKEN_INPUT" | tr -d '[:space:]')
@@ -306,9 +374,9 @@ else
   ADD_GITIGNORE=1
   if [ "$NON_INTERACTIVE" = 0 ]; then
     if [ "$USE_GUM" = 1 ]; then
-      gum confirm --default=true "Add the thk block to .gitignore?" || ADD_GITIGNORE=0
+      gum confirm --default=true "Add the thk block to .gitignore?" </dev/tty || ADD_GITIGNORE=0
     else
-      read -r -p "  Add the thk block to .gitignore? [Y/n] " reply
+      read -r -p "  Add the thk block to .gitignore? [Y/n] " reply </dev/tty
       [[ "$reply" =~ ^[Nn]$ ]] && ADD_GITIGNORE=0
     fi
   fi
