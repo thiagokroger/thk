@@ -28,7 +28,7 @@
         "grand_maester": {
           "runner": "claude-code",
           "agent": "grand-maester",
-          "model": "claude-opus-4-7"
+          "model": "claude-opus-4-6"
         },
         "master_of_laws": {
           "runner": "claude-code",
@@ -80,7 +80,7 @@
         "grand_maester": {
           "runner": "claude-code",
           "agent": "grand-maester",
-          "model": "claude-opus-4-7"
+          "model": "claude-opus-4-6"
         },
         "master_of_laws": {
           "runner": "claude-code",

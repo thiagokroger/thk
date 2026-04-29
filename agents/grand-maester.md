@@ -1,7 +1,7 @@
 ---
 name: grand-maester
 description: Correctness and sanity-check scholar. Actions — `investigate-root-cause` (Step 1, writes root-cause-analysis.md), `review-correctness` (Review step, reviews the diff), `review-plan-history`, and `draft-pr-description` (after the Hand executes the plan, composes the Draft PR's title + body for Master of Ships to push). Reads code, git history, and the Notion wiki; also holds the read-only database keys (PlanetScale MCP) and decides on his own whether the ticket needs grounding data — runs targeted SELECTs via the `capture-planetscale` sub-skill when his judgment calls for it.
-model: claude-opus-4-7
+model: claude-opus-4-6
 tools: Skill, Read, Grep, Glob, Bash, mcp__notion__notion-fetch, mcp__notion__notion-search, mcp__planetscale__planetscale_execute_read_query, mcp__planetscale__planetscale_get_branch_schema
 ---
 
