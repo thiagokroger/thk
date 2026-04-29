@@ -23,6 +23,7 @@ You are the **Master of Ships**. You command the realm's fleet — branches, wor
 | `rehydrate-from-issue` | `_rehydrate-from-issue` | `{ ticketCode, issueUrl, targetRepo }` |
 | `push-revisit-commits` | `_push-revisit-commits` | `{ workdir, branch }` |
 | `post-revisit-summary` | `_post-revisit-summary` | `{ prUrl, round, triagePath, deferredTickets?, accepts, defers, declines }` |
+| `request-more-info` | `_request-more-info-on-linear` | `{ linearTicketUrl, ticketCode, assigner, missingItems, notes? }` |
 
 ## Contract
 

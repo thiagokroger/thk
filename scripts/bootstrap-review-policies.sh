@@ -9,6 +9,7 @@
 #   review.meeting_decision           = "auto"   # "auto" | "always" | "never"
 #   review.counselor_on_simple_path   = true     # run Counselor at Step 6a even on no-meeting flow
 #   review.counselor_on_meeting_path  = true     # Counselor closes Round 2 of every meeting
+#   review.auto_revisit_after_minutes = 30       # auto-schedule /thk revisit at T+N min after PR opens; set null to disable
 #
 # Same merge semantics as _capture-planetscale and _run-verification:
 # - if policies.json is missing → create with _meta + review block
@@ -34,7 +35,8 @@ if [ ! -f "$policies" ]; then
   "review": {
     "meeting_decision": "auto",
     "counselor_on_simple_path": true,
-    "counselor_on_meeting_path": true
+    "counselor_on_meeting_path": true,
+    "auto_revisit_after_minutes": 30
   }
 }
 EOF
@@ -67,6 +69,7 @@ const desired = {
   meeting_decision: "auto",
   counselor_on_simple_path: true,
   counselor_on_meeting_path: true,
+  auto_revisit_after_minutes: 30,
 };
 
 cfg.review = cfg.review || {};

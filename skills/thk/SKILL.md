@@ -54,6 +54,21 @@ Match the need to the specialist; dispatch the right action. This is the **capab
 - "I need to capture a URL" → Master of Whisperers (parallel-safe).
 - "I need a final external read" → Counselor (only as deliberation closer).
 
+## <a name="linear-ping-policy"></a>Linear ping policy
+
+Linear interactions follow one rule: **@-mention only when the Hand is blocked and the human must act.** Everything else is passive.
+
+| Surface | Mechanism | Pings? |
+|---|---|---|
+| Plan published (Step 4) | Links panel attachment via `announce-plan-completion` (resource card) | No |
+| Draft PR opened (Step 7c) | Nothing — the GitHub issue (already in the Links panel) carries the PR URL | No |
+| Revisit summary (Step 8) | PR comment thread + GH issue update | No |
+| **needs-more-info outcome (Step 1e)** | Linear comment **@-mentioning the assigner** with the bulleted gap list, via `request-more-info` | **Yes** |
+
+The principle: pings interrupt humans; only interrupt them when their input is the bottleneck. PR-ready announcements, plan-published notices, and review-completed updates all reach humans through the Linear ticket's Links panel — they click through when they have time. Only `needs-more-info` blocks the Hand from making progress, and that's the one case where a ping is justified.
+
+If you need a new Linear ping path in the future (e.g., a Council member flagged a critical security finding mid-execute that requires immediate human input), add it as a new Master of Ships action with the same shape as `request-more-info` — explicit reason, specific asks, unblock instructions in the body. Don't reuse `request-more-info` for non-needs-more-info cases.
+
 ## Runtime profiles
 
 thk is profile-driven. The default profile preserves the original setup (Claude Code council + Codex-backed Counselor Altman), but the King can choose another profile with `$THK_PROFILE` or a config file.
@@ -409,7 +424,16 @@ Update `progress.md`: Step 1 = done; record captured counts and the assigner's n
 Then read `<contextDir>/linear/<PRIMARY-TICKET>.md` and walk the relevant code (Grep / Read) to evaluate:
 
 - **Already fixed?** If the code already exhibits the expected behavior, write `<contextDir>/outcome.md` with status `already-fixed`, evidence (file:line), and a note for the assigner. Set `progress.md` status `already-fixed`. **Stop.**
-- **Missing critical info?** If the captured context cannot produce a plan, write `<contextDir>/outcome.md` with status `needs-more-info` and specific questions. Set `progress.md` status `needs-more-info`. **Stop.**
+- **Missing critical info?** If the captured context cannot produce a plan:
+  1. Write `<contextDir>/outcome.md` with status `needs-more-info` and specific questions.
+  2. Set `progress.md` status `needs-more-info`.
+  3. **Ping the assigner on Linear** — this is one of the few cases where an @-mention is justified (the Hand is blocked; the human must act). Dispatch:
+     ```
+     Agent(master-of-ships, prompt="action: request-more-info. linearTicketUrl: <primary ticket url>. ticketCode: <code>. assigner: <name from capture-linear>. missingItems: [<one-line gaps from outcome.md>]. notes: <optional one-paragraph context>.")
+       → returns { commentUrl }
+     ```
+     The skill posts a Linear comment @-mentioning the assigner with the bulleted gap list and the unblock incantation (`re-run /thk <linearTicketUrl>`). If the dispatch fails, log it under Notes but **do not** retry — the outcome.md + progress.md are the durable record.
+  4. **Stop.**
 
 Otherwise, proceed to Step 2.
 
@@ -731,13 +755,39 @@ The skill reads the plan + the actual `git diff` + the GitHub issue + the source
 ### 7c. Master of Ships pushes + opens the Draft PR
 
 ```
-Agent(master-of-ships, prompt="action: push-and-open-pr. workdir: <worktree>. branchName: <session branch>. prTitle: \"<from 7b>\". prBody: \"<from 7b>\". draft: true. linearTicketUrl: <primary ticket url>. assigner: <name from capture-linear>.")
+Agent(master-of-ships, prompt="action: push-and-open-pr. workdir: <worktree>. branchName: <session branch>. prTitle: \"<from 7b>\". prBody: \"<from 7b>\". draft: true.")
   → returns { prUrl }
 ```
 
-The skill runs `git push -u origin <branch>` then `gh pr create --draft --title ... --body-file ...`. It posts a Linear comment tagging the assigner with the PR URL when `linearTicketUrl` and `assigner` are present.
+The skill runs `git push -u origin <branch>` then `gh pr create --draft --title ... --body-file ...`. **No Linear comment is posted** — PR-ready announcements are noise; the GitHub issue (linked to the Linear ticket's Links panel at Step 4) carries the PR URL, so anyone glancing at the Linear ticket finds the PR via Linear → GH issue → PR. Linear @-mentions are reserved for cases where the Hand is blocked and the human must act (see [Linear ping policy](#linear-ping-policy)).
 
-Update `progress.md`: Step 7 = done; record `commitSha` and `prUrl`. Set `status: pr-drafted`. **Stop.**
+### 7d. Auto-schedule the revisit
+
+The Draft PR is open. External reviewers (CodeRabbit, humans, other bots) will weigh in over the next minutes to hours. **The Hand schedules the revisit automatically** — no user prompt, no follow-up offer.
+
+Read `<targetRepo>/.thk/policies.json:review.auto_revisit_after_minutes`:
+
+- Integer (default `30`) → schedule a one-shot via `CronCreate` to fire `/thk revisit <TICKET-CODE>` at T+N minutes.
+- `null` → skip scheduling; print a one-line hint instead: "Revisit later with `/thk revisit <TICKET>`."
+
+Schedule the cron:
+
+```
+CronCreate({
+  prompt: "/thk revisit <TICKET-CODE>",
+  schedule: "<one-shot expression at T+N minutes — see CronCreate schema>",
+  description: "thk: revisit <TICKET-CODE> after PR feedback window"
+})
+  → returns { id, nextFire }
+```
+
+Print a brief confirmation in the final message:
+
+> Revisit scheduled for `<ISO time>` (cron-id `<id>`). Cancel with `CronDelete <id>` if you don't want it.
+
+If `CronCreate` fails (the runtime doesn't expose it, the schedule slot is full, etc.) → log the failure under `progress.md` Notes and fall back to the hint behavior. Don't error the run — Step 7 has already succeeded.
+
+Update `progress.md`: Step 7 = done; record `commitSha`, `prUrl`, and (if scheduled) `revisitCronId` + `revisitFireAt`. Set `status: pr-drafted`. **Stop.**
 
 ## Step 8 — Revisit the PR (after external review)
 
@@ -986,7 +1036,7 @@ If you need to capture a long payload, write it to `context/<subfolder>/<name>.m
 |--------|---------------------------|
 | Hand (you) | `execute-plan` (sole agent — you drive the implementation, dispatching only verification + commit + PR) |
 | Master of Whisperers | `capture-linear`, `capture-jam`, `capture-figma` |
-| Master of Ships | `resolve-base-branch`, `scaffold-session`, `commit-changes`, `push-and-open-pr`, `publish-plan-to-github`, `update-github-issue`, `announce-plan-completion`, `create-linear-followup-ticket`, `cleanup-session`, `rehydrate-from-issue`, `push-revisit-commits`, `post-revisit-summary` |
+| Master of Ships | `resolve-base-branch`, `scaffold-session`, `commit-changes`, `push-and-open-pr`, `publish-plan-to-github`, `update-github-issue`, `announce-plan-completion`, `create-linear-followup-ticket`, `cleanup-session`, `rehydrate-from-issue`, `push-revisit-commits`, `post-revisit-summary`, `request-more-info` |
 | Grand Maester | `investigate-root-cause`, `review-correctness`, `review-plan-history`, `draft-pr-description`, `assess-meeting-need` |
 | Master of Laws | `review-against-rules`, `run-verification`, `review-plan-rules` |
 | Lord Commander | `red-team-review`, `review-plan-security` |
