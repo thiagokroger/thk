@@ -866,6 +866,93 @@ Status transitions:
 
 Step 8 is **idempotent across rounds** — invoking `/thk revisit` again later runs round N+1 against whatever feedback has accumulated since the last round.
 
+## <a name="end-of-run-summary"></a>End-of-run summary (your final message)
+
+Every `/thk` invocation — happy path or terminal failure — ends with **one comprehensive summary message** printed to the King. The user's typical workflow is "run thk, walk away for an hour, come back" — when they come back, the final message is what they read. Make it scannable, complete, and self-contained: no follow-up question, no "want me to do X next" prompt (Step 7d already auto-schedules the revisit).
+
+Assemble the summary from `<sessionPath>/progress.md` + `<sessionPath>/log.md`:
+
+- **progress.md** — structured status fields per step.
+- **log.md** — every `skill-invoke` / `skill-return` / `dispatch-detail` / `decision` / `step-start` / `step-done` / `error` with timestamps. Compute per-member durations by subtracting matched `skill-invoke` and `skill-return` timestamps; sum across multiple invocations of the same member.
+
+### Required structure
+
+```markdown
+# thk run complete — <TICKET-CODE>
+
+**Status:** <pr-drafted | already-shipped | already-fixed | needs-more-info | execution-failed | pre-pr-review-failed | plan-published-review-failed | needs-jam-token | failed>
+**Duration:** <Hh Mm Ss> (<HH:MM> → <HH:MM>)
+**Profile:** <selected_profile>
+**Meeting:** yes / no (<one-line reason from Grand Maester verdict or policy override>)
+**Counselor pass at Step 6a:** ran / skipped (<reason — policies.review.counselor_on_simple_path or "n/a — meeting flow">)
+
+## What shipped
+
+<one to two plain-English sentences synthesizing what the change actually does — derived from plan.md's Approach + the actual git diff. Keep it human; this is what the King will read first.>
+
+## Artifacts
+
+- **GitHub issue** (plan + bundled context): <url>
+- **Draft PR**: <url>          ← omit on non-pr-drafted outcomes
+- **Linear ticket**: <url>
+- **Revisit scheduled**: <ISO time> (cron-id `<id>`, cancel with `CronDelete <id>`)   ← omit if auto_revisit_after_minutes was null or scheduling failed
+
+## Council decisions
+
+| Member | Decision | Time |
+|---|---|---|
+| Master of Whisperers | <one line — what was captured (counts of tickets / Jams / Figmas)> | <duration> |
+| Master of Ships | <one line — concatenate the mechanical actions in order, e.g. "resolved base, scaffolded, published GH issue #N, linked Linear, committed <sha>, pushed PR #N"> | <duration> |
+| Grand Maester | <one line — meeting verdict + any other actions like draft-pr-description or capture-planetscale> | <duration> |
+| Master of Laws | <one line — verification result + iterations OR "Not consulted (...)"> | <duration or "—"> |
+| Lord Commander | <one line — security findings OR "Not consulted (no security surface)"> | <duration or "—"> |
+| Master of Coin | <one line — estimate / scope-check / techdebt drafts OR "Not consulted (effort obvious, scope tiny)"> | <duration or "—"> |
+| Counselor | <one line — verdict OR "Not consulted (<reason>)"> | <duration or "—"> |
+
+## Timeline
+
+Numbered, one line per major event. Aim for 6–12 events; collapse routine sub-steps. Each line is `<HH:MM> — <event>`.
+
+1. <HH:MM> — Captured Linear ticket <code> (Master of Whisperers): <counts>
+2. <HH:MM> — Scaffolded session <id> on branch <branch>
+3. <HH:MM> — Drafted plan.md (<N> files to modify, <M> tests)
+4. <HH:MM> — Published plan as GH issue #<N>
+5. <HH:MM> — Linked GH issue to Linear ticket Links panel
+6. <HH:MM> — Grand Maester `assess-meeting-need` → <verdict> (weight <X>/10)
+7. <HH:MM> — Executed plan: <files-changed-count> files, verification green at iteration <N>
+8. <HH:MM> — Counselor pass at Step 6a: <ran/skipped> (<reason>)
+9. <HH:MM> — Grand Maester drafted PR title + body
+10. <HH:MM> — Master of Ships committed <sha>, opened Draft PR #<N>
+11. <HH:MM> — Auto-scheduled `/thk revisit <code>` for <HH:MM> (cron-id <id>)
+12. <HH:MM> — Done. Status: <terminal-status>
+
+For terminal-failure outcomes (execution-failed, needs-more-info, etc.), the timeline is shorter and ends with the failure event. Always include the timestamp where the run halted.
+
+## Files changed
+
+<git diff --stat output, trimmed to one-file-per-line; omit on non-execution outcomes>
+
+## What's next
+
+<one to three lines>
+
+- For `pr-drafted` with revisit scheduled: "The Draft PR will receive review from CodeRabbit + your team. `/thk revisit <code>` fires automatically at <HH:MM>."
+- For `pr-drafted` with revisit disabled: "Run `/thk revisit <code>` later when reviewers have weighed in."
+- For `needs-more-info`: "Posted Linear @-mention to <assigner> with the missing context list. Re-run `/thk <linearTicketUrl>` once they've responded."
+- For `already-fixed` / `already-shipped`: state the artifact pointers; no next step needed.
+- For `execution-failed` / `pre-pr-review-failed`: "Plan + bundled context live on GH issue <url>. Implementation is on the worktree at `<sessionPath>/worktree/`. The King decides whether to revise the plan or implement manually."
+```
+
+### Rules
+
+- **One message, end of run.** Do not stream the summary mid-flow; print it once after the last step completes (or after the terminal failure write).
+- **No follow-up offers.** The /schedule offer is now auto-handled by Step 7d. Don't append "Want me to…" — the user came back to read what happened, not to make another decision.
+- **Timestamps from log.md only** — don't reconstruct or guess. If `log.md` is missing entries (rare; mid-run crash), note "(timeline incomplete — log.md was truncated)" and proceed.
+- **Per-member time is sum of skill-invoke→skill-return deltas.** A member dispatched 5 times shows the total. Skip members with zero dispatches; show "—" in their Time column.
+- **Plain language in "What shipped".** No internal jargon (Master of Ships, assets-worktree, refs/thk/...). The King may not have read the SKILL.md; this paragraph speaks to whoever opens the terminal.
+- **Cite artifacts by full URL** — copyable. Don't shorten with markdown link text only.
+- **Match scope to outcome.** For `already-fixed` / `already-shipped` / `needs-jam-token`, much of the table is "—" and the timeline is 2–3 lines. Don't fabricate filler.
+
 ## Ad-hoc council consults
 
 The Council members are always dispatchable, regardless of whether you convened a meeting. Step 3 decides only whether the *formal* multi-round meeting structure runs — it doesn't gate routine specialist consults.
@@ -1066,3 +1153,4 @@ Later iterations may add:
 - **Execution is single-agent.** You write the code yourself via `_execute-plan`. Don't fan out to sub-agents writing files in parallel — the merge-conflict surface and re-derivation cost outweigh the wall-clock savings for any typical ticket. The exception is genuinely embarrassingly parallel work (mechanical rename across disjoint files), and even then, the Hand decides per-run.
 - **The Draft PR is the implementation handoff.** When the run reaches `pr-drafted`, the human reviewer takes over. Don't mark the PR ready-for-review yourself; it stays in Draft until a human moves it.
 - The King has the final word. If `outcome.md` says `already-fixed`, `needs-more-info`, `already-shipped`, `execution-failed`, `pre-pr-review-failed`, or `plan-published-review-failed`, it is a proposal to him — not a unilateral decision.
+- **Every terminal exit prints the [end-of-run summary](#end-of-run-summary).** Happy path or failure, the run's final message is the comprehensive summary — status, what shipped, artifacts, council-decisions table, timeline, what's next. The user typically walks away during a run; they come back to read this single message, so it must be self-contained. No follow-up "want me to…" offers (Step 7d already handles the revisit auto-schedule).
