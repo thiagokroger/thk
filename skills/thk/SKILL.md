@@ -757,19 +757,25 @@ If a pre-commit hook fails, the skill returns `{ error }`. Read the hook output,
 
 ```
 Agent(grand-maester, prompt="action: draft-pr-description. workdir: <worktree>. contextDir: <c>. planPath: <c>/plan.md. ticketCode: <code>. issueUrl: <from Step 2b>. linearTicketUrl: <primary ticket url>.")
-  → returns { title, body }
+  → returns { title, body, titlePath, bodyPath }
 ```
 
-The skill reads the plan + the actual `git diff` + the GitHub issue + the source ticket, then composes a Draft PR title and body that connect what was implemented to what was planned. Don't second-guess the result; trust the Grand Maester's synthesis.
+The skill reads the plan + the actual `git diff` + the GitHub issue + the source ticket, composes a Draft PR title and body, and **writes them to disk** at `<contextDir>/pr-title.txt` and `<contextDir>/pr-body.md`. The handoff to Step 7c is via these files, **not** via the inline `title`/`body` strings — long bodies have been observed to corrupt across long context gaps (e.g., when a diff-phase meeting at Step 6 pushes Step 7c's dispatch 30+ minutes after Step 7b's composition).
+
+Capture `bodyPath` and `titlePath` from the return envelope; you will pass them to Step 7c.
 
 ### 7c. Master of Ships pushes + opens the Draft PR
 
 ```
-Agent(master-of-ships, prompt="action: push-and-open-pr. workdir: <worktree>. branchName: <session branch>. prTitle: \"<from 7b>\". prBody: \"<from 7b>\". draft: true.")
-  → returns { prUrl }
+Agent(master-of-ships, prompt="action: push-and-open-pr. workdir: <worktree>. branchName: <session branch>. prTitlePath: \"<titlePath from 7b>\". prBodyPath: \"<bodyPath from 7b>\". draft: true.")
+  → returns { prUrl, bodyVerified, bodyCorrected }
 ```
 
-The skill runs `git push -u origin <branch>` then `gh pr create --draft --title ... --body-file ...`. **No Linear comment is posted** — PR-ready announcements are noise; the GitHub issue (linked to the Linear ticket's Links panel at Step 4) carries the PR URL, so anyone glancing at the Linear ticket finds the PR via Linear → GH issue → PR. Linear @-mentions are reserved for cases where the Hand is blocked and the human must act (see [Linear ping policy](#linear-ping-policy)).
+The skill preflights both files (existence, non-empty, no placeholder content), runs `git push -u origin <branch>` and `gh pr create --draft --title ... --body-file <bodyPath>`, then reads the body back from GitHub via `gh pr view --json body --jq '.body | length'` and re-uploads via `gh pr edit --body-file` if the stored body is shorter than 90% of what was sent. The result is bullet-proof against both context-loss corruption (the file bypasses agent context) and API truncation (the post-create check catches it).
+
+If `bodyCorrected: true`, log a one-line note in `progress.md` Notes — useful for diagnosing recurring API-side issues, but not blocking.
+
+**No Linear comment is posted** — PR-ready announcements are noise; the GitHub issue (linked to the Linear ticket's Links panel at Step 4) carries the PR URL, so anyone glancing at the Linear ticket finds the PR via Linear → GH issue → PR. Linear @-mentions are reserved for cases where the Hand is blocked and the human must act (see [Linear ping policy](#linear-ping-policy)).
 
 ### 7d. Auto-schedule the revisit
 

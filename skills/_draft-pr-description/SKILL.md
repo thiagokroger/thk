@@ -1,6 +1,6 @@
 ---
 name: _draft-pr-description
-description: Grand Maester scholar action — read the plan + the actual `git diff` + the published GitHub issue + the source ticket, then compose a Draft PR's title and body that connects what was implemented to what was planned. Returns `{ title, body }` for Master of Ships' `push-and-open-pr` to execute. Cites the issue and the ticket so reviewers land on the full context with one click. Notes deviations from the plan if the implementation diverged.
+description: Grand Maester scholar action — read the plan + the actual `git diff` + the published GitHub issue + the source ticket, then compose a Draft PR's title and body that connects what was implemented to what was planned. **Persists** the title and body to `<contextDir>/pr-title.txt` and `<contextDir>/pr-body.md` so Master of Ships' `push-and-open-pr` can read them from disk — passing long bodies through agent context risks corruption when the dispatch happens later (e.g., after a 30-minute meeting). Returns `{ title, body, titlePath, bodyPath }`. Cites the issue and the ticket so reviewers land on the full context with one click.
 ---
 
 # Draft PR Description
@@ -25,10 +25,14 @@ The plan is the chronicle of what was decided; the diff is the chronicle of what
 
 ```
 {
-  title: "<one-line PR title — matches repo convention>",
-  body:  "<markdown PR body — described below>"
+  title:     "<one-line PR title — matches repo convention>",
+  body:      "<markdown PR body — described below>",
+  titlePath: "<abs — <contextDir>/pr-title.txt>",
+  bodyPath:  "<abs — <contextDir>/pr-body.md>"
 }
 ```
+
+The inline `title` / `body` fields are kept for callers that may want to inspect the values, but **`titlePath` / `bodyPath` are the canonical handoff** — `_push-and-open-pr` reads from those files and ignores the inline strings. Long bodies passed through agent context have been observed to corrupt on a 30+ minute gap between composition and dispatch (the Grand Maester might compose at T+0 and Master of Ships might run after a long meeting at T+55m, by which point the body has fallen out of the dispatching agent's working context). The file-based handoff bypasses agent context entirely.
 
 ## Procedure
 
@@ -101,15 +105,43 @@ The full plan (with bundled context — Linear thread, Jam recordings, Figma des
 
 If a sanity check fails, fix the body before returning. Don't ship a half-templated PR.
 
-### 5. Return
+### 5. Persist to disk (mandatory — handoff is file-based)
+
+Write the title and body to `<contextDir>/`:
+
+```bash
+printf '%s\n' "$TITLE" > "<contextDir>/pr-title.txt"
+# For the body, write the markdown verbatim — no quoting, no escape conversion.
+# Use a heredoc against an absolute path to avoid any agent-side substitution:
+cat > "<contextDir>/pr-body.md" <<'PR_BODY_EOF'
+<the full markdown body composed in step 3>
+PR_BODY_EOF
+```
+
+Verify both files were written and are non-empty before returning:
+
+```bash
+[ -s "<contextDir>/pr-title.txt" ] || error "pr-title.txt failed to write"
+[ -s "<contextDir>/pr-body.md"  ] || error "pr-body.md failed to write"
+```
+
+Body must be at least 100 bytes (a real PR body composed per Step 3 is always larger). If smaller, it's a sign the composition itself was truncated — error rather than persisting a degraded body.
+
+### 6. Return
 
 ```
-{ title, body }
+{
+  title:     "<TITLE>",
+  body:      "<BODY>",
+  titlePath: "<contextDir>/pr-title.txt",
+  bodyPath:  "<contextDir>/pr-body.md"
+}
 ```
 
 ## Rules
 
-- **Read-only.** The Grand Maester does not write code, does not commit, does not push. He composes the description; Master of Ships executes the PR open.
+- **Persists, never inlines.** The PR title and body are written to `<contextDir>/pr-title.txt` and `<contextDir>/pr-body.md`. `_push-and-open-pr` reads from those files. The handoff must not depend on the body surviving in agent context — gaps between this skill and PR open can be 30+ minutes (e.g., diff-phase meeting), and long markdown bodies have been observed to corrupt across that gap.
+- **Read-only on the code side.** The Grand Maester does not write code, does not commit, does not push. He composes the description (and persists it to `<contextDir>/`); Master of Ships executes the PR open.
 - **Cite the chronicle.** Always link the GitHub issue (the plan + bundled context) and the source ticket. Reviewers should land on the full context with one click.
 - **Match repo tone.** Read `git log --oneline -20` first; copy the convention. Don't invent a new style.
 - **No fluff sections.** Omit "Deviations" and "Notes for review" if there's genuinely nothing to say. Empty sections in PRs read as careless.
